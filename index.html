@@ -3082,6 +3082,12 @@ function renderCashPanes(){
     const el=document.getElementById('cash-pane-'+k);
     if(el)el.hidden=!(cashPane==='all'||cashPane===k);
   });
+  // 표 높이 제한(.sm = 300px)은 '전체'에서 세 표를 나란히 볼 때만 필요하다.
+  // 하나만 보고 있으면 아래가 통째로 비므로 제한을 풀어 줄을 더 보여준다.
+  ['u','x'].forEach(k=>{
+    const el=document.getElementById(k+'-box');
+    if(el)el.classList.toggle('sm',cashPane==='all');
+  });
   if(cashPane==='all'||cashPane==='d')paintDenomTotal();
 }
 
