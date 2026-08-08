@@ -5031,12 +5031,26 @@ function normBlock(kind,rows,defDest,force){
 // used = 이 파일에서 이미 쓴 여행 이름. 한 시트가 한 여행이므로 겹치면 다른 여행이다.
 function sheetBlocks(rows,sheetName,used){
   const blocks=[];
+  // 제목 줄만 있고 내용이 없던 표를 잠시 들고 있는다.
+  // 사용자가 제목 줄과 내용 사이에 빈 줄을 넣으면 표가 둘로 갈리는데,
+  // 그냥 버리면 뒤따라오는 내용이 '제목 없는 덩어리'가 되어 **앞의 엉뚱한 표**에 붙는다.
+  // (실제로 환전 내용이 여행 정보표에 붙어 나라 칸에 금액이 들어간 여행이 생겼다)
+  let pending=null;
   splitBlocks(rows).forEach(b=>{
-    // 제목 줄만 있고 내용이 없는 표(안 쓴 환전표 등)는 그냥 건너뛴다.
-    // 이걸 앞 표에 붙이면 제목 줄이 데이터로 들어가 엉뚱한 여행이 생긴다
     const k=headKind(b[0]);
-    if(k){if(b.length>1)blocks.push({kind:k,rows:b});return;}
-    // 제목 줄이 아닌 덩어리 — 앞에 표가 있으면 그 표가 이어지는 것으로 본다
+    if(k){
+      if(b.length>1){blocks.push({kind:k,rows:b});pending=null;}
+      else pending={kind:k,head:b[0]};   // 내용은 아직 — 다음 덩어리를 기다린다
+      return;
+    }
+    // 제목 줄이 아닌 덩어리
+    if(pending){
+      // 바로 앞이 '제목만 있던 표' 였다면 이 덩어리가 그 표의 내용이다
+      blocks.push({kind:pending.kind,rows:[pending.head,...b]});
+      pending=null;
+      return;
+    }
+    // 앞에 표가 있으면 그 표가 이어지는 것으로 본다
     // (지출 목록 중간에 빈 줄을 넣어도 잘리지 않게)
     const prev=blocks[blocks.length-1];
     if(prev)prev.rows=prev.rows.concat(b);
