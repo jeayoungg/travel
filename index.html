@@ -1717,13 +1717,24 @@ const airlineOf=t=>{
     .map(i=>String(i.merchant||'').trim()).filter(Boolean))];
   return names.length?{txt:names.join(' · '),auto:true}:{txt:'',auto:false};
 };
-// 잔돈 = 현금 화면에서 세어 넣은 '지금 가진 현금' 그대로
+// 잔돈 = 여행이 끝나고 손에 남은 현지 현금. 근거가 둘이라 둘 다 본다.
+//   ① 권종에 세어 넣은 것        — 실제로 세어 본 값
+//   ② 환전 − 현금 지출           — 기록으로 계산한 '남아야 할 값'
+// 권종을 안 세면 검증의 차이가 그대로 마이너스로 뜨는데, 그 크기가 곧 ②다.
+// 그래서 '권종 + (마이너스인 차이만큼)' = max(①,②) 가 된다 (2026-08-09 사용자 지시).
+// 차이가 플러스일 때는 더하지 않는다 — 이미 ① 에 들어 있어 두 번 세게 된다.
+// 지출이 환전보다 많으면 남은 돈은 없다 → 0.
 const changeOf=t=>{
   if(t.change)return {txt:t.change,auto:false};
-  const sum=(typeof denomSum==='function')?denomSum(t):0;
-  if(!sum)return {txt:'',auto:false};
-  const cur=(t.cash&&t.cash.cur)||t.cur||'';
-  return {txt:won(sum)+(cur==='KRW'?'원':' '+cur),auto:true};
+  if(typeof cashOf!=='function')return {txt:'',auto:false};
+  const c=cashOf(t);
+  const counted=denomSum(t);                                     // ① 세어 넣은 권종
+  const exTot=(c.ex||[]).reduce((s,e)=>s+(e.fx||0),0);
+  const expect=exTot-cashUsed(t);                                // ② 환전 − 현금 지출
+  const left=Math.max(counted,expect,0);
+  if(!left)return {txt:'',auto:false};
+  const cur=c.cur||t.cur||'';
+  return {txt:won(left)+(cur==='KRW'?'원':' '+cur),auto:true};
 };
 const itemsSum=t=>(t.items||[]).reduce((s,i)=>s+(i.amount||0),0);
 // 여행금액: 상세 내역이 있으면 그 합계가 곧 여행금액 (자동 계산)
@@ -1854,6 +1865,10 @@ function showView(id){
   scrollTo(0,0);
 }
 function showList(){
+  // 목록으로 돌아올 때 반드시 다시 그린다.
+  // 현금 화면에서 권종을 세어 넣어도 setDenom() 은 현금 화면만 갱신하므로,
+  // 다시 그리지 않으면 '잔돈' 칸이 빈칸인 채로 남아 자동 집계가 안 되는 것처럼 보였다.
+  render();
   showView('view-list');
   currentId=null;window.scrollTo(0,0);
 }
