@@ -582,11 +582,11 @@
   .vwrap{display:flex;align-items:flex-end;justify-content:center;gap:6px;overflow-x:auto;
     padding-bottom:4px;-webkit-overflow-scrolling:touch}
   .vwrap::-webkit-scrollbar{display:none}
-  /* 날짜가 몇 개 없다고 화면 폭을 나눠 가지면 막대가 덩어리가 된다.
-     최대 52px 로 묶고 가운데 정렬. 많아지면 줄어드는 대신 **가로로 밀어서** 본다 —
-     18px 까지 줄이면 날짜(5/24)가 안 들어가 라벨을 걸러 내야 했고, 그러면 일자가 사라진다
-     이제 날짜를 하나도 빠짐없이 적는다. */
-  .vcol{flex:0 0 auto;min-width:40px;max-width:52px;display:flex;flex-direction:column;
+  /* 상자 폭을 고르게 나눠 갖는다 (flex:1 1 0).
+     예전엔 52px 로 묶어 두었더니 넓은 화면에서 막대가 가운데로 뭉쳐 보였다.
+     그렇다고 무한정 늘리면 날이 두셋일 때 덩어리가 되므로 110px 에서 멈춘다.
+     좁아질 때는 40px 까지만 — 그 아래로 가면 날짜(5/24)가 안 들어간다. */
+  .vcol{flex:1 1 0;min-width:40px;max-width:110px;display:flex;flex-direction:column;
     align-items:center;gap:4px;border:0;background:transparent;font-family:inherit;
     cursor:pointer;padding:2px 0;border-radius:8px}
   .vcol:hover{background:var(--accent-soft)}
@@ -610,7 +610,8 @@
   .vbars.tight .vlab{font-size:.58rem}
   .vbars.tight .vlab em{display:none}
   .vbars.veryTight .vcol{min-width:32px}
-  .vbars.veryTight .vamt{display:none}
+  /* 예전엔 여기서 금액을 감췄다. 이제는 '만' 단위로 줄여 적으므로 좁아도 들어간다 */
+  .vbars.veryTight .vamt{font-size:.52rem}
   /* 아래 안내에 최고치 · 합계를 같이 적어 막대에 숫자를 덜 얹는다 */
   .vnote .vpeak{color:var(--accent);font-weight:700}
   .vnote{font-size:.7rem;color:var(--muted);margin-top:9px}
@@ -1488,6 +1489,16 @@
 const KEY='travel-expense-v2', OLDKEY='travel-expense-v1';
 const CATS=['항공권','숙박','식비','교통','쇼핑','투어·관광','통신','보험·비자','수수료·환전','기타'];
 const won=n=>(n||n===0)?Number(n).toLocaleString('ko-KR'):'';
+// 좁은 칸에 적는 짧은 금액. 세로 막대처럼 자리가 없는 곳에서만 쓴다.
+// 1만 미만은 그대로, 그 위는 '만' 단위 (100만 미만은 소수 한 자리까지 남겨 25.4만 처럼).
+// 정확한 값은 막대의 title 과 지출 표에 그대로 있다.
+const shortWon=n=>{
+  n=Math.round(Number(n)||0);
+  if(Math.abs(n)<10000)return won(n);
+  const m=n/10000;
+  return (Math.abs(m)<100?(Math.round(m*10)/10).toLocaleString('ko-KR')
+                         :won(Math.round(m)))+'만';
+};
 const numify=s=>{const v=String(s??'').replace(/[^\d.-]/g,'');return v===''?null:Math.round(Number(v))};
 // 금액 칸은 치는 동안 세 자리마다 쉼표를 넣는다 — 0 을 몇 개 쳤는지 세지 않아도 되게.
 // 읽을 땐 numify() 가 쉼표를 떼므로 저장 값에는 영향이 없다.
@@ -1926,27 +1937,39 @@ function renderDetail(){
   // 라벨은 어떤 기준이든 먼저 갱신한다 — 세로 막대 분기에서 return 하면 옛 값이 남는다
   if(!document.getElementById('sum-box').hidden)
     document.getElementById('d-sumn').textContent=dim.n;
+  // 요약이 접혀 있을 때 그리면 상자 폭이 0 으로 잡힌다 (안이 숨겨져 있어서).
+  // 그대로 340 으로 짐작하면 넓은 화면에서도 막대 수와 금액 형식을 좁은 화면 기준으로
+  // 정해 버린다. 숨겨지지 않은 위쪽 요소까지 올라가 실제 폭을 찾는다.
+  const boxW=(el=>{
+    let w=el.clientWidth;
+    for(let p=el.parentElement;!w&&p;p=p.parentElement)w=p.clientWidth;
+    return w||Math.max(280,Math.min(520,innerWidth-32));
+  })(box);
   // 세로 막대는 한 화면에 들어갈 때만 쓴다.
   // 날짜가 많으면 옆으로 밀어야 해서 보기 불편하다.
   // 그때는 분류별·결제유형별과 같은 가로 막대 목록으로 — 날짜가 다 보이고 밀 필요가 없다.
   const dayFits=summaryDim==='day'&&dim.rows.length<=Math.max(6,Math.floor(
-    ((box.clientWidth||340)-4)/46));
+    (boxW-4)/46));
   if(dayFits){
     const n=dim.rows.length;
     box.className='bars sumbars vbars'+(n>16?' tight':'')+(n>28?' veryTight':'');
     box.style.setProperty('--vh',(n>16?86:104)+'px');
+    // 금액을 막대마다 적는다 (2026-08-09 사용자 요청 — 눌러야 보이면 한눈에 못 견준다).
+    // 칸이 좁으면 '2,320,526' 이 옆 칸을 침범하므로, 실제 칸 폭을 재서 형식을 고른다.
+    // 한 칸 폭 = (상자 폭 − 사이 간격) ÷ 칸 수, 단 CSS 의 40~110px 안에서.
+    const gap=6;
+    const colW=Math.min(110,Math.max(40,(boxW-(n-1)*gap)/n));
+    const longFits=colW>=62;          // '2,320,526' 이 들어가는 최소 폭
     box.innerHTML=`<div class="vwrap">`+dim.rows.map((r,i)=>{
       const h=Math.max(2,Math.round(r.amt/dmax*100));
       const d=new Date(r.k+'T00:00:00');
       const md=isNaN(d)?fmtD(r.k):`${Number(r.k.slice(5,7))}/${Number(r.k.slice(8,10))}`;
       const wd=isNaN(d)?'':WD[d.getDay()];
-      // 날짜는 하나도 빠뜨리지 않는다 — 막대가 좁아지는 대신 가로로 밀어서 본다.
-      // 금액만 최고치·고른 것에 적는다 (다 적으면 겹쳐서 못 읽는다)
+      // 날짜도 금액도 하나도 빠뜨리지 않는다
       const showLab=true;
-      const showAmt=(r.k===peak)||r.on;
       return `<button class="vcol${r.on?' on':''}${r.k===peak?' peak':''}" onclick="${r.go}"`+
         ` title="${esc(md)} ${esc(wd)} · ${won(r.amt)}원 · ${esc(r.sub)}">`+
-        `<span class="vamt">${showAmt?won(r.amt):''}</span>`+
+        `<span class="vamt">${longFits?won(r.amt):shortWon(r.amt)}</span>`+
         `<span class="vtrack"><span class="vfill" style="height:${h}%"></span></span>`+
         `<span class="vlab">${showLab?esc(md):''}<em>${showLab?esc(wd):''}</em></span></button>`;
     }).join('')+`</div><div class="vnote">막대를 누르면 그 날만 봅니다</div>`;
