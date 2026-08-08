@@ -420,6 +420,11 @@
   .check .verdict{margin-top:2px;font-weight:400;font-size:.82rem;color:var(--muted);line-height:1.45}
   .check .verdict.ok{color:var(--leaf)}
   .check .verdict.bad{color:var(--danger)}
+  /* 안내가 시키는 일을 그 자리에서 할 수 있게. 단추가 다른 탭에 있으면 못 찾는다 */
+  .check .vfix{display:inline-block;margin-top:7px;border:0;border-radius:999px;
+    background:var(--accent);color:#fff;font-family:inherit;font-size:.8rem;font-weight:600;
+    padding:6px 13px;cursor:pointer}
+  .check .vfix:hover{filter:brightness(1.06)}
   /* 접힘 머리줄 — 차이 하나만. 근거는 눌러야 나온다 */
   .check{overflow:hidden}
   .chead{display:flex;align-items:baseline;gap:10px;width:100%;border:0;background:transparent;
@@ -1746,13 +1751,21 @@ const leftOf=t=>{
   const inTot=(c.ex||[]).reduce((s,e)=>s+(e.fx||0),0);   // 환전 + 지난 여행에서 가져온 현금
   return Math.max(heldCash(t),inTot-cashUsed(t),0);
 };
+// 지난 여행에서 들고 와 이번에 쓴 현금
+const carryInOf=t=>(cashOf(t).ex||[]).filter(e=>e.carry).reduce((s,e)=>s+(e.fx||0),0);
+// 목록의 '잔돈' — 이번 여행이 남긴 돈에서, 지난 여행에서 가져다 쓴 돈을 뺀 값.
+// 남기면 +, 가져다 쓰면 −. 여행을 죽 훑으면 서로 상쇄돼 사라진 것이 눈에 보인다
+// (2026-08-09 사용자 지시). 직접 적은 값이 있으면 그것을 '남긴 돈'으로 삼는다.
 const changeOf=t=>{
-  if(t.change)return {txt:t.change,auto:false};
   if(typeof cashOf!=='function')return {txt:'',auto:false};
-  const left=leftOf(t);
-  if(!left)return {txt:'',auto:false};
+  const typed=t.change?numify(t.change):null;
+  if(t.change&&typed==null)return {txt:t.change,auto:false};   // 숫자가 아닌 메모는 그대로 둔다
   const cur=cashOf(t).cur||t.cur||'';
-  return {txt:won(left)+(cur==='KRW'?'원':' '+cur),auto:true};
+  const unit=cur==='KRW'?'원':(cur?' '+cur:'');
+  const left=(typed!=null)?typed:leftOf(t);
+  const net=left-carryInOf(t);
+  if(!net)return {txt:'',auto:false};
+  return {txt:(net>0?'+':'−')+won(Math.abs(net))+unit,auto:(typed==null)};
 };
 const itemsSum=t=>(t.items||[]).reduce((s,i)=>s+(i.amount||0),0);
 // 여행금액: 상세 내역이 있으면 그 합계가 곧 여행금액 (자동 계산)
@@ -3358,7 +3371,8 @@ function renderCashCheck(){
       // 환전한 것보다 많이 썼다면 대개 지난 여행에서 남은 현금을 들고 온 것이다.
       // 그 경우엔 '안 적은 환전' 이 아니라 가져온 현금을 넣어야 맞는다.
       :(expect<0&&!carry
-        ?`환전한 것보다 ${won(-expect)}${unit} 더 썼습니다 — <b>지난 여행에서 가져온 현금</b>이 있으면 아래 단추로 넣어 주세요`
+        ?`환전한 것보다 ${won(-expect)}${unit} 더 썼습니다 — <b>지난 여행에서 가져온 현금</b>일 수 있습니다.<br>`+
+         `<span class="bp">여기에 잔돈을 적으면 차이가 오히려 커집니다 — 아래 단추로 넣어 주세요.</span>`
        :diff>0?`가진 돈이 ${won(diff)}${unit} 더 많습니다 — 안 적은 환전이 있거나 지출을 더 적었어요`
               :`가진 돈이 ${won(-diff)}${unit} 모자랍니다 — 안 적은 지출이 있거나 거스름돈을 덜 받았어요`))
     : (used
@@ -3372,7 +3386,10 @@ function renderCashCheck(){
       `<span class="cval ${state}">${okAll?`${diff===0?'0':won(diff)}${unit}`:'—'}</span>`+
       `<span class="ccar">${checkOpen?'⌃':'⌄'}</span>`+
     `</button>`+
-    `<div class="verdict ${state}">${note}</div>`+
+    `<div class="verdict ${state}">${note}`+
+      // 안내가 시키는 일을 그 자리에서. 단추는 '환전' 탭에 있어 여기서는 안 보인다
+      (expect<0&&!carry?`<br><button class="vfix" onclick="addCarryIn()">↩ 지난 여행 현금 넣기</button>`:'')+
+    `</div>`+
     `<div class="cbody"${checkOpen?'':' hidden'}>`+
       `<div class="cline"><span>환전한 금액</span><span>${won(swap)}${unit}</span></div>`+
       (carry?`<div class="cline"><span>지난 여행에서 가져온 현금</span><span>${won(carry)}${unit}</span></div>`:'')+
@@ -4867,9 +4884,12 @@ function doBackup(kind){
 // 백업 → 엑셀에서 고침 → 복원 이 자연스럽다 (배울 서식이 하나뿐)
 function tripSheet(o){
   const cut=r=>(catDepth===3)?r:r.slice(1);   // 2단계면 맨 앞 대분류 열을 뺀다
+  // '잔돈' 열 — 읽는 쪽(tripFieldOf)은 진작 알아보는데 쓰는 쪽이 안 만들고 있었다.
+  // 그래서 백업했다 복원하면 손으로 적어 둔 잔돈이 사라졌다. 맨 뒤에 붙이므로
+  // 이 열이 없는 옛 파일도 그대로 읽힌다 (제목 줄 이름으로 맞춰 읽는다).
   return {name:o.name,rows:[
-    ['여행지','나라','시작','종료','인원'],
-    [o.dest||'',o.country||'',o.start||'',o.end||'',o.people||''],
+    ['여행지','나라','시작','종료','인원','잔돈'],
+    [o.dest||'',o.country||'',o.start||'',o.end||'',o.people||'',o.change||''],
     [],
     ['날짜','현지 금액','원화','통화'],
     ...(o.ex||[]),
@@ -4905,6 +4925,7 @@ function tripSheets(){
     return tripSheet({
       name:sheetNameFor(t,used),
       dest:t.dest||'', country:t.country||'', start:t.start||'', end:t.end||'', people:t.people??'',
+      change:t.change||'',
       ex:(c.ex||[]).map(e=>[e.date||'',e.fx??null,e.krw??null,e.cur||c.cur||'']),
       items:(t.items||[]).map(i=>[i.maj||'', i.mid||i.cat||'', i.min||i.name||'', i.date||'',
         i.amount??null, i.rate??null, i.fx??null, i.merchant||'', i.pay||'',
