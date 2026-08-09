@@ -1155,7 +1155,7 @@
     </div>
   </section>
 
-  <p class="foot-note"><span class="bstamp">v1.0 · 2026.08.09 · v29</span>기기에 자동 저장됩니다 · 기기를 옮길 땐 <b>백업/복원</b><br>
+  <p class="foot-note"><span class="bstamp">v1.0 · 2026.08.09 · v30</span>기기에 자동 저장됩니다 · 기기를 옮길 땐 <b>백업/복원</b><br>
     엑셀로 적어둔 표는 <b>입력 서식</b>을 받아 채운 뒤 <b>복원</b>으로 올리세요</p>
  </div>
 </div>
@@ -1568,6 +1568,10 @@
     <div class="grid2">
       <div class="field"><label>1박 평균 숙박 (원)</label><input id="f-lodge" type="text" inputmode="numeric" placeholder="비우면 지출에서 자동"></div>
       <div class="field"><label id="f-cur-lab">현지 통화</label><select id="f-cur" onchange="pickCur()"></select></div>
+      <!-- 옛 여행은 지출을 다 적어두지 않아 환율이 저절로 안 나온다. 그때 손으로 적는 칸.
+           1단위 기준으로 적는다 (100엔이 1,018원이면 10.19). 목록에는 고시 단위로 보인다. -->
+      <div class="field"><label>환율 (1단위당 원)</label>
+        <input id="f-rate" type="text" inputmode="decimal" placeholder="비우면 기록에서 자동"></div>
     </div>
     <div class="calc" id="calc-preview"></div>
     <div class="sheet-actions">
@@ -1658,7 +1662,10 @@ function rateCell(t){
   // 지출에 현지 금액이 적혀 있으면 그걸로 (실제로 치른 값이라 제일 정확하다).
   // 옛 여행처럼 원화만 적어 두었으면 **환전 기록의 환율**로 채운다 —
   // 그 길이 이미 있는데 안 쓰고 빈칸으로 두면, 사람은 넣을 데가 없다고 여긴다.
-  let r=spendRate(t), src='지출 전체 평균';
+  // 손으로 적은 값이 가장 세다 — 옛 여행은 기록이 없어 사람만 아는 값이다.
+  // 없으면 지출의 현지 금액으로, 그것도 없으면 환전 기록으로.
+  let r=Number(t.rate)||0, src='직접 적음';
+  if(!r){r=spendRate(t);src='지출 전체 평균';}
   if(!r){r=avgRate(t);src='환전 평균';}
   // 환율이 없는 줄(국내 여행)도 두 줄 자리를 비워 둔다 —
   // 한 줄만 두면 그 줄만 키가 작아 표가 들쭉날쭉해 보인다
@@ -4989,6 +4996,12 @@ function openForm(id){
   document.getElementById('f-air').value=t?won(t.air):'';
   document.getElementById('f-airline').value=t?t.airline||'':'';
   document.getElementById('f-lodge').value=t?won(t.lodge):'';
+  // 손으로 적은 환율만 칸에 넣는다. 저절로 나오는 값은 placeholder 로만 보여 준다 —
+  // 채워 두면 '사람이 확인한 값' 이 되어 버린다 (잔돈에서 똑같이 겪은 함정).
+  const rEl=document.getElementById('f-rate');
+  rEl.value=(t&&t.rate)?String(t.rate):'';
+  const auto2=t?(spendRate(t)||avgRate(t)):0;
+  rEl.placeholder=auto2?`${fmtRate(auto2)} (기록에서 자동)`:'비우면 기록에서 자동';
   fillCurSelect(t);
   updateCalc();
   document.getElementById('backdrop').classList.add('on');
@@ -5029,6 +5042,9 @@ function readForm(){
     airline:document.getElementById('f-airline').value.trim(),
     lodge:numify(document.getElementById('f-lodge').value),
     country:document.getElementById('f-country').value.trim(),
+    // 손으로 적은 환율 (1단위당 원). 소수점을 쓰므로 numify(정수화)를 쓰면 안 된다
+    rate:(v=>{const n=Number(String(v).replace(/[^\d.]/g,''));return isFinite(n)&&n>0?n:null;})
+      (document.getElementById('f-rate').value),
   };
 }
 function updateCalc(){
@@ -5152,8 +5168,11 @@ function xlsxBlob(sheets){
 // (같은 곳을 세 번 간 여행이 하나로 뭉쳤다).
 // CSV 는 한 장이라 여행 정보를 줄마다 함께 적는다. '잔돈' 도 여기 있어야
 // 백업 → 복원에서 손으로 적어 둔 잔돈이 살아 돌아온다 (엑셀만 넣고 여기를 빠뜨렸었다).
+// '여행환율' 은 여행 전체에 하나뿐인 값이라 줄마다 같은 값이 반복된다.
+// 그래도 넣어야 한다 — CSV 는 한 장이라 여행 정보를 줄마다 함께 적는 구조다.
+// (이름을 '환율' 로 하면 안 된다. 바로 옆 항목 환율과 겹쳐 서로 잡아먹는다.)
 const ITEM_HEAD=['여행지','나라','시작','종료','인원',
-  '대분류','중분류','소분류','날짜','원화','환율','현지화폐','상호명','결제유형','수수료','캐시백','비고'];
+  '대분류','중분류','소분류','날짜','원화','환율','현지화폐','상호명','결제유형','수수료','캐시백','비고','여행환율'];
 // CSV 는 한 장이라 환전표에도 여행 시작일이 있어야 한다 —
 // 같은 곳을 여러 번 가면 이름만으로는 어느 여행의 환전인지 못 가른다
 const EX_HEAD=['여행지','시작','날짜','현지 금액','원화','통화'];
@@ -5164,7 +5183,8 @@ function itemRows(){
     t.country||'', t.start||'', t.end||'', t.people??null,
     i.maj||'', i.mid||i.cat||'', i.min||i.name||'', i.date||'',
     i.amount??null, i.rate??null, i.fx??null,
-    i.merchant||'', i.pay||'', i.fee||null, i.cashback||null, i.note||''])));
+    i.merchant||'', i.pay||'', i.fee||null, i.cashback||null, i.note||'',
+    t.rate??null])));
   return r;
 }
 function exRowsFlat(){
@@ -5234,8 +5254,10 @@ function tripSheet(o){
   // 그래서 백업했다 복원하면 손으로 적어 둔 잔돈이 사라졌다. 맨 뒤에 붙이므로
   // 이 열이 없는 옛 파일도 그대로 읽힌다 (제목 줄 이름으로 맞춰 읽는다).
   return {name:o.name,rows:[
-    ['여행지','나라','시작','종료','인원'],
-    [o.dest||'',o.country||'',o.start||'',o.end||'',o.people||''],
+    // '환율' — 옛 여행처럼 지출을 다 안 적어 둔 경우 사람이 손으로 적는 값.
+    // 이 표에는 항목 환율이 없으므로 이름이 겹치지 않는다 (CSV 는 '여행환율' 로 쓴다)
+    ['여행지','나라','시작','종료','인원','환율'],
+    [o.dest||'',o.country||'',o.start||'',o.end||'',o.people||'',o.rate||''],
     [],
     ['날짜','현지 금액','원화','통화'],
     ...(o.ex||[]),
@@ -5271,6 +5293,7 @@ function tripSheets(){
     return tripSheet({
       name:sheetNameFor(t,used),
       dest:t.dest||'', country:t.country||'', start:t.start||'', end:t.end||'', people:t.people??'',
+      rate:t.rate??'',
       ex:(c.ex||[]).map(e=>[e.date||'',e.fx??null,e.krw??null,e.cur||c.cur||'']),
       items:(t.items||[]).map(i=>[i.maj||'', i.mid||i.cat||'', i.min||i.name||'', i.date||'',
         i.amount??null, i.rate??null, i.fx??null, i.merchant||'', i.pay||'',
@@ -5455,15 +5478,15 @@ function findTripFor(name,start){
 // 덩어리를 표준 열 순서로 옮겨 담는다.
 // 여행지 열이 없는 표(시트 하나에 여행 하나인 서식)는 그 시트의 여행지를 채워 넣는다.
 const BLK={
-  trip:{head:['여행지','나라','시작','종료','여행금액','인원','항공권','항공기명','1박평균숙박','잔돈'],
-        fields:['dest','country','start','end','amount','people','air','airline','lodge','change'],
+  trip:{head:['여행지','나라','시작','종료','여행금액','인원','항공권','항공기명','1박평균숙박','잔돈','여행환율'],
+        fields:['dest','country','start','end','amount','people','air','airline','lodge','change','rate'],
         fieldOf:h=>tripFieldOf(h)},
   // '잔돈' 도 표준 열에 있어야 한다 — 여기서 빠지면 normBlock 이 걸러버려
   // importItemTable 까지 값이 도착하지 못한다 (CSV 왕복에서 잔돈이 사라졌다)
   item:{head:['여행지','나라','시작','종료','인원','대분류','중분류','소분류','날짜','원화','환율',
-              '현지화폐','상호명','결제유형','수수료','캐시백','비고','분류'],
+              '현지화폐','상호명','결제유형','수수료','캐시백','비고','분류','여행환율'],
         fields:['dest','country','start','end','people','maj','mid','name','date','krw','rate',
-                'fx','merchant','pay','fee','cashback','note','cat'],
+                'fx','merchant','pay','fee','cashback','note','cat','trate'],
         fieldOf:h=>itemFieldOf(h)},
   ex:  {head:['여행지','시작','날짜','현지 금액','원화','통화'],
         fields:['dest','start','date','fx','krw','cur'],
@@ -5682,6 +5705,8 @@ function tripFieldOf(h){
   if(/종료|도착|귀국|end/.test(t))return 'end';
   if(/인원|명수|people|pax/.test(t))return 'people';
   if(/잔돈|change/.test(t))return 'change';
+  // 여행 정보 표에는 항목 환율이 없으므로 '환율' 만 적어도 여행 환율로 읽는다
+  if(/^여행환율$|^환율$|^rate$/.test(t))return 'rate';
   if(/금액|총액|비용|경비|amount/.test(t))return 'amount';
   return '';
 }
@@ -5700,6 +5725,9 @@ function itemFieldOf(h){
   if(/상호|가맹|점포|merchant/.test(t))return 'merchant';   // '소분류'보다 먼저 — 이름과 헷갈리지 않게
   if(/소분류|항목|내역|품목|내용|name|item/.test(t))return 'name';
   if(/분류|카테고리|cat/.test(t))return 'cat';
+  // ※ '여행환율'(여행 전체) 을 먼저 걸러야 한다. 아래 /환율/ 은 부분일치라
+  //    안 그러면 여행 환율이 항목 환율로 빨려 들어간다
+  if(/^여행환율$/.test(t))return 'trate';
   if(/환율|rate/.test(t))return 'rate';
   if(/원화|krw|kwr|won|원\)/.test(t))return 'krw';
   if(/결제|카드|현금|pay/.test(t))return 'pay';
@@ -5745,6 +5773,8 @@ function importTripTable(rows,fname,done){
       people:Number(String(get(row,'people')).replace(/[^\d]/g,''))||null,
       air:numify(get(row,'air')), airline:get(row,'airline'),
       lodge:numify(get(row,'lodge')), change:get(row,'change'),
+      // 손으로 적은 환율 — 소수라 numify(정수화)를 쓰면 10.19 가 1019 가 된다
+      rate:(v=>{const n=Number(String(v).replace(/[^\d.]/g,''));return isFinite(n)&&n>0?n:null;})(get(row,'rate')),
       items:[], cash:null
     });
   });
@@ -5801,6 +5831,8 @@ function importItemTable(rows,fname,done){
     put('start',st);
     put('end',cellDate(get(row,'end')));
     put('people',cellNum(get(row,'people'))||'');
+    // 손으로 적은 여행 환율 ('여행환율' 열) — 줄마다 같은 값이 반복되므로 처음 것만 쓴다
+    put('rate',(v=>{const n=Number(String(v).replace(/[^\d.]/g,''));return isFinite(n)&&n>0?n:'';})(get(row,'trate')));
     info.set(dest,m);
     const krw=cellNum(get(row,'krw')), fx=cellNum(get(row,'fx'));
     if(!krw&&!fx){skipped++;return;}
@@ -5855,10 +5887,12 @@ function importItemTable(rows,fname,done){
           t={id:newTripId(n),dest:nm,country:m.country||'',
              start:m.start||ds[0]||'',end:m.end||ds[ds.length-1]||'',
              amount:null,people:m.people||null,air:null,airline:'',lodge:null,
-             change:'',items:[],cash:null};
+             change:'',rate:m.rate||null,items:[],cash:null};
           trips.push(t);
           importMap.set(dest,t.id);
         }
+        // 이미 있는 여행이라도 파일에 손으로 적은 환율이 있으면 받아 둔다
+        else if(m.rate&&!t.rate)t.rate=m.rate;
         t.items=(t.items||[]).concat(items);
         n+=items.length;
       });
