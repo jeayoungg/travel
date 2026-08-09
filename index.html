@@ -489,10 +489,19 @@
     padding-top:13px;font-weight:600}
   .drow.sum .da{color:var(--ink);font-size:1rem;font-weight:600}
   /* 잔돈(총액) 줄 — 권종 장수 칸(74px)에는 '6,000 IDR' 이 안 들어간다.
-     금액을 통째로 적는 자리라 넓게 잡고 오른쪽 정렬한다 */
-  .drow.chg{grid-template-columns:minmax(0,1fr) minmax(132px,1.1fr) minmax(0,auto)}
+     라벨과 입력칸 **두 칸만** 쓴다. 안내를 같은 줄 세 번째 칸에 두었더니
+     좁은 폭에서 칸들을 밀어 라벨과 입력칸이 겹쳤다 (2026-08-09 사용자 지적). */
+  /* 아래 권종 줄과 **같은 격자**를 쓴다 — 그래야 입력칸이 세로로 맞는다.
+     다만 '6,000 IDR' 은 74px 에 안 들어가므로 2~3번 칸을 함께 쓴다 */
+  /* #denoms 가 좌우 14px 안쪽 여백을 갖는다 — 같은 여백을 줘야 칸이 세로로 맞는다 */
+  .chgbox{padding:0 14px;border-bottom:.5px solid var(--line)}
+  /* 라벨은 제 폭만 쓰고 입력칸이 남은 자리를 다 먹는다 —
+     오른쪽 끝은 위의 세그먼트·아래 합계와 같은 세로선에 선다 */
+  .drow.chg{grid-template-columns:auto minmax(0,1fr);border-bottom:0}
   .drow.chg input{text-align:right}
-  .drow.chg .da{font-size:.72rem;line-height:1.2;text-align:right;white-space:normal}
+  .chghint{font-size:.72rem;line-height:1.35;color:var(--muted);
+    padding:0 2px 9px;margin-top:-4px}
+  .chghint:empty{display:none}
   .drow.addd{border-bottom:0}
   .drow.addd .du{color:var(--muted)}
   .drow.addd input{text-align:left}
@@ -1257,11 +1266,14 @@
           <small>세어 넣거나 총액만 적으면 됩니다</small></span>
       </div>
       <!-- 지폐를 일일이 세지 않고 총액만 적고 싶을 때. 아래 권종을 세어 넣으면 그쪽이 이긴다 -->
-      <div class="drow chg">
-        <span class="du">잔돈 (총액)</span>
-        <input id="c-change" inputmode="numeric" placeholder="비우면 자동 계산"
-               oninput="setChangeAmt(this.value)" autocomplete="off">
-        <span class="da" id="c-change-hint"></span>
+      <div class="chgbox">
+        <div class="drow chg">
+          <span class="du">잔돈 (총액)</span>
+          <input id="c-change" inputmode="numeric" placeholder="비우면 자동 계산"
+                 oninput="setChangeAmt(this.value)" autocomplete="off">
+        </div>
+        <!-- 안내는 아랫줄로. 같은 줄에 두면 좁은 폭에서 라벨과 입력칸을 밀어 겹친다 -->
+        <div class="chghint" id="c-change-hint"></div>
       </div>
       <div class="denoms" id="denoms"></div>
     </div>
@@ -4866,7 +4878,9 @@ function xlsxBlob(sheets){
 // CSV 는 한 장짜리라 여행 정보를 줄마다 함께 적는다.
 // 안 그러면 나라·인원이 사라지고, 같은 곳을 여러 번 간 여행이 이름으로 뭉친다
 // (같은 곳을 세 번 간 여행이 하나로 뭉쳤다).
-const ITEM_HEAD=['여행지','나라','시작','종료','인원',
+// CSV 는 한 장이라 여행 정보를 줄마다 함께 적는다. '잔돈' 도 여기 있어야
+// 백업 → 복원에서 손으로 적어 둔 잔돈이 살아 돌아온다 (엑셀만 넣고 여기를 빠뜨렸었다).
+const ITEM_HEAD=['여행지','나라','시작','종료','인원','잔돈',
   '대분류','중분류','소분류','날짜','원화','환율','현지화폐','상호명','결제유형','수수료','캐시백','비고'];
 // CSV 는 한 장이라 환전표에도 여행 시작일이 있어야 한다 —
 // 같은 곳을 여러 번 가면 이름만으로는 어느 여행의 환전인지 못 가른다
@@ -4875,7 +4889,7 @@ const EX_HEAD=['여행지','시작','날짜','현지 금액','원화','통화'];
 function itemRows(){
   const r=[ITEM_HEAD];
   trips.forEach(t=>(t.items||[]).forEach(i=>r.push([t.dest,
-    t.country||'', t.start||'', t.end||'', t.people??null,
+    t.country||'', t.start||'', t.end||'', t.people??null, t.change||'',
     i.maj||'', i.mid||i.cat||'', i.min||i.name||'', i.date||'',
     i.amount??null, i.rate??null, i.fx??null,
     i.merchant||'', i.pay||'', i.fee||null, i.cashback||null, i.note||''])));
@@ -5173,9 +5187,11 @@ const BLK={
   trip:{head:['여행지','나라','시작','종료','여행금액','인원','항공권','항공기명','1박평균숙박','잔돈'],
         fields:['dest','country','start','end','amount','people','air','airline','lodge','change'],
         fieldOf:h=>tripFieldOf(h)},
-  item:{head:['여행지','나라','시작','종료','인원','대분류','중분류','소분류','날짜','원화','환율',
+  // '잔돈' 도 표준 열에 있어야 한다 — 여기서 빠지면 normBlock 이 걸러버려
+  // importItemTable 까지 값이 도착하지 못한다 (CSV 왕복에서 잔돈이 사라졌다)
+  item:{head:['여행지','나라','시작','종료','인원','잔돈','대분류','중분류','소분류','날짜','원화','환율',
               '현지화폐','상호명','결제유형','수수료','캐시백','비고','분류'],
-        fields:['dest','country','start','end','people','maj','mid','name','date','krw','rate',
+        fields:['dest','country','start','end','people','change','maj','mid','name','date','krw','rate',
                 'fx','merchant','pay','fee','cashback','note','cat'],
         fieldOf:h=>itemFieldOf(h)},
   ex:  {head:['여행지','시작','날짜','현지 금액','원화','통화'],
@@ -5401,6 +5417,7 @@ function itemFieldOf(h){
   if(/^시작|^출발일?$|^start/.test(t))return 'start';
   if(/^종료|^도착일?$|^귀국|^end/.test(t))return 'end';
   if(/^인원$|^명수$|^people$|^pax$/.test(t))return 'people';
+  if(/^잔돈$|^change$/.test(t))return 'change';
   if(/^(날짜|일자|date)$/.test(t))return 'date';
   if(/대분류/.test(t))return 'maj';
   if(/중분류/.test(t))return 'mid';
@@ -5508,6 +5525,7 @@ function importItemTable(rows,fname,done){
     put('start',st);
     put('end',cellDate(get(row,'end')));
     put('people',cellNum(get(row,'people'))||'');
+    put('change',get(row,'change'));
     info.set(dest,m);
     const krw=cellNum(get(row,'krw')), fx=cellNum(get(row,'fx'));
     if(!krw&&!fx){skipped++;return;}
@@ -5561,7 +5579,8 @@ function importItemTable(rows,fname,done){
           // 적어 넣은 여행 정보가 있으면 그걸 쓰고, 없으면 날짜에서 기간을 잡는다
           t={id:newTripId(n),dest:nm,country:m.country||'',
              start:m.start||ds[0]||'',end:m.end||ds[ds.length-1]||'',
-             amount:null,people:m.people||null,air:null,airline:'',lodge:null,change:'',items:[],cash:null};
+             amount:null,people:m.people||null,air:null,airline:'',lodge:null,
+             change:m.change||'',items:[],cash:null};
           trips.push(t);
           importMap.set(dest,t.id);
         }
