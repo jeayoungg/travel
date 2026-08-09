@@ -1155,7 +1155,7 @@
     </div>
   </section>
 
-  <p class="foot-note"><span class="bstamp">v1.0 · 2026.08.09 · v30</span>기기에 자동 저장됩니다 · 기기를 옮길 땐 <b>백업/복원</b><br>
+  <p class="foot-note"><span class="bstamp">v1.0 · 2026.08.09 · v31</span>기기에 자동 저장됩니다 · 기기를 옮길 땐 <b>백업/복원</b><br>
     엑셀로 적어둔 표는 <b>입력 서식</b>을 받아 채운 뒤 <b>복원</b>으로 올리세요</p>
  </div>
 </div>
@@ -1662,6 +1662,9 @@ function rateCell(t){
   // 지출에 현지 금액이 적혀 있으면 그걸로 (실제로 치른 값이라 제일 정확하다).
   // 옛 여행처럼 원화만 적어 두었으면 **환전 기록의 환율**로 채운다 —
   // 그 길이 이미 있는데 안 쓰고 빈칸으로 두면, 사람은 넣을 데가 없다고 여긴다.
+  // 원화로만 쓴 여행(국내)에는 환율이 없다. 손으로 적어 두었더라도 보여주면
+  // 'KRW 10.19'(1원이 10.19원) 같은 말이 안 되는 값이 된다.
+  if((cashOf(t).cur||'KRW')==='KRW')return `<td class="num"><span class="rq">&nbsp;</span>&nbsp;</td>`;
   // 손으로 적은 값이 가장 세다 — 옛 여행은 기록이 없어 사람만 아는 값이다.
   // 없으면 지출의 현지 금액으로, 그것도 없으면 환전 기록으로.
   let r=Number(t.rate)||0, src='직접 적음';
@@ -5003,6 +5006,7 @@ function openForm(id){
   const auto2=t?(spendRate(t)||avgRate(t)):0;
   rEl.placeholder=auto2?`${fmtRate(auto2)} (기록에서 자동)`:'비우면 기록에서 자동';
   fillCurSelect(t);
+  paintRateField();
   updateCalc();
   document.getElementById('backdrop').classList.add('on');
 }
@@ -5018,7 +5022,14 @@ function fillCurSelect(t){
 function markCurLabel(){
   document.getElementById('f-cur-lab').textContent=formCurAuto?'현지 통화 (여행지로 자동)':'현지 통화';
 }
-function pickCur(){formCurAuto=false;markCurLabel();}
+function pickCur(){formCurAuto=false;markCurLabel();paintRateField();}
+// 원화로만 쓴 여행에는 환율 칸이 뜻이 없다 — 통화가 KRW 면 칸을 감춘다
+function paintRateField(){
+  const el=document.getElementById('f-rate');if(!el)return;
+  const cur=document.getElementById('f-cur').value||'KRW';
+  const box=el.closest('.field');
+  if(box)box.style.display=(cur==='KRW')?'none':'';
+}
 function suggestCur(){
   const dest=document.getElementById('f-dest').value;
   const g=guessDest(dest);
@@ -5028,6 +5039,7 @@ function suggestCur(){
     document.getElementById('f-cty-lab').textContent='나라 (자동)';
   }
   markCurLabel();
+  paintRateField();   // 여행지를 치면 통화가 저절로 바뀐다 — 환율 칸도 따라가야 한다
 }
 function closeForm(){document.getElementById('backdrop').classList.remove('on');}
 function readForm(){
