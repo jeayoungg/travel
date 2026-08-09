@@ -261,6 +261,9 @@
   .yrow{display:block;padding:6px;margin:0 -6px;border-radius:10px;cursor:pointer;
     transition:background .12s}
   .yrow:hover{background:var(--accent-soft)}
+  /* 좁혀 볼 수 없는 묶음(나라 모름·날짜 없음)은 눌리는 척하지 않는다 */
+  .yrow.plain{cursor:default}
+  .yrow.plain:hover{background:transparent}
   /* 이름 칸은 날짜(80px)보다 넓게 — '인도네시아' 같은 나라 이름이 들어가야 한다.
      좁은 화면 규칙(.brow)보다 이 규칙이 세서 좁은 폭도 여기서 같이 정해 준다 */
   .ybars .brow{grid-template-columns:104px minmax(0,1fr) calc(var(--balen,9)*1ch)}
@@ -1145,7 +1148,7 @@
     </div>
   </section>
 
-  <p class="foot-note"><span class="bstamp">v1.0 · 2026.08.09 · v24</span>기기에 자동 저장됩니다 · 기기를 옮길 땐 <b>백업/복원</b><br>
+  <p class="foot-note"><span class="bstamp">v1.0 · 2026.08.09 · v25</span>기기에 자동 저장됩니다 · 기기를 옮길 땐 <b>백업/복원</b><br>
     엑셀로 적어둔 표는 <b>입력 서식</b>을 받아 채운 뒤 <b>복원</b>으로 올리세요</p>
  </div>
 </div>
@@ -2022,8 +2025,11 @@ function yearGroups(list,mode){
   else keys.sort((a,b)=>a==='-'?1:(b==='-'?-1:b.localeCompare(a)));
   return keys.map(k=>{
     const g=by.get(k);
+    // 좁혀 볼 수 있는 묶음만 누를 수 있다. 나라를 안 적은 여행은 거를 값이 없으므로
+    // 누르면 목록이 텅 빈다 — 아예 안 눌리게 둔다
+    const canFilter=mode==='country'?!!countryOf(g[0]):k!=='-';
     return {key:mode+':'+k, label:mode==='country'?k:(k==='-'?'날짜 없음':k+'년'),
-      trips:g, total:sum(g),
+      trips:g, total:sum(g), pick:canFilter?k:'',
       sub:g.map(t=>t.dest||'-').join(' · ')};
   });
 }
@@ -2058,9 +2064,9 @@ function renderYearChart(list){
     }).join('');
     // 묶음을 누르면 그 해·그 나라만 남긴다. 여행별에서는 그 여행으로 들어간다
     const act=mode==='trip'?`showDetail('${esc(String(g.trips[0].id))}')`
-      :mode==='country'?`filterFromChart('cty','${esc(g.label)}')`
-      :`filterFromChart('year','${esc(String(yearOf(g.trips[0])))}')`;
-    return `<div class="yrow" onclick="${act}" title="${esc(g.label)} · ${won(g.total)}원">`+
+      :g.pick?`filterFromChart('${mode==='country'?'cty':'year'}','${esc(g.pick)}')`:'';
+    return `<div class="yrow${act?'':' plain'}"${act?` onclick="${act}"`:''} `+
+      `title="${esc(g.label)} · ${won(g.total)}원">`+
       `<div class="brow">`+
         `<span class="bn">${esc(g.label)}</span>`+
         `<span class="btrack"><span class="yfill" style="width:${pct.toFixed(2)}%">${segs}</span></span>`+
