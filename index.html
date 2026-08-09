@@ -203,6 +203,10 @@
   .chev{color:var(--muted);font-weight:400}
   .auto{display:inline-block;margin-left:5px;font-size:.6rem;font-weight:700;color:var(--accent);
     background:var(--accent-soft);border-radius:5px;padding:2px 5px;vertical-align:middle;letter-spacing:0}
+  /* '계산' 은 확인된 값이 아니라 기록에서 미루어 본 값 — 파랑이 아니라 회색으로 낮춘다 */
+  .auto.calc{color:var(--muted);background:rgba(118,118,128,.12)}
+  /* '가진 현금' 제목줄 안에서는 다른 규칙이 여백을 9px 로 키운다 — 여기만 콕 집어 되돌린다 */
+  #den-tot .auto{font-size:.6rem;padding:2px 5px;line-height:1.25;margin-left:6px}
 
   /* ---- 상세 화면 ---- */
   .view{display:none}
@@ -498,7 +502,9 @@
   /* 라벨은 제 폭만 쓰고 입력칸이 남은 자리를 다 먹는다 —
      오른쪽 끝은 위의 세그먼트·아래 합계와 같은 세로선에 선다 */
   .drow.chg{grid-template-columns:auto minmax(0,1fr);border-bottom:0}
-  .drow.chg input{text-align:right}
+  /* 넓은 화면에서 칸이 1,200px 로 늘어나 혼자 튀었다. 오른쪽 끝에 붙이고 폭을 묶는다 —
+     아래 권종 줄들과 같은 자리에 서고, 좁은 화면에서는 그대로 꽉 찬다 */
+  .drow.chg input{text-align:right;justify-self:end;width:100%;max-width:220px}
   .chghint{font-size:.72rem;line-height:1.35;color:var(--muted);
     padding:0 2px 9px;margin-top:-4px}
   .chghint:empty{display:none}
@@ -1087,7 +1093,7 @@
     </div>
   </section>
 
-  <p class="foot-note"><span class="bstamp">v1.0 · 2026.08.09</span>기기에 자동 저장됩니다 · 기기를 옮길 땐 <b>백업/복원</b><br>
+  <p class="foot-note"><span class="bstamp">v1.0 · 2026.08.09 · v18</span>기기에 자동 저장됩니다 · 기기를 옮길 땐 <b>백업/복원</b><br>
     엑셀로 적어둔 표는 <b>입력 서식</b>을 받아 채운 뒤 <b>복원</b>으로 올리세요</p>
  </div>
 </div>
@@ -1880,7 +1886,9 @@ function render(){
       `<td class="l muted">${(a=>esc(a.txt)+(a.auto&&a.txt?'<span class="auto">자동</span>':''))(airlineOf(t))}</td>`+
       `<td class="num">${won(lodgeOf(t))}${(!t.lodge&&lodgeOf(t))?'<span class="auto">자동</span>':''}</td>`+
       `<td class="num">${won(perPersonAir(t))}</td>`+
-      `<td class="l muted">${(c=>esc(c.txt)+(c.auto&&c.txt?'<span class="auto">자동</span>':''))(changeOf(t))}</td>`+
+      // 잔돈만 '계산' 이라 적는다 — 항공권·숙박은 실제 지출의 합이라 믿을 만하지만
+      // 잔돈은 현금 기록이 다 들어와야 맞는 값이다. '자동' 이라 하면 확인된 값처럼 보인다
+      `<td class="l muted">${(c=>esc(c.txt)+(c.auto&&c.txt?'<span class="auto calc">계산</span>':''))(changeOf(t))}</td>`+
       `<td class="rowact">`+
         `<button class="ract" title="여행 정보 수정" onclick="event.stopPropagation();openForm('${t.id}')"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M11.4 2.6l2 2-7.6 7.6-2.6.6.6-2.6zM10 4l2 2" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg></button>`+
 
@@ -3208,7 +3216,14 @@ function paintDenomTotal(){
   const t=tripById(currentId);if(!t)return;
   const c=cashOf(t), unit=c.cur==='KRW'?'원':(' '+c.cur);
   const el=document.getElementById('den-tot');
-  if(el)el.textContent=won(heldCash(t))+unit;
+  // 세지도 적지도 않았으면 0 이 아니라 **기록으로 계산한 값**을 보여준다.
+  // 0 이라고 하면 '없다' 는 주장이 되어, 목록의 잔돈(+9,000)과 정반대가 된다.
+  // 다만 '계산' 이라 못 박는다 — 현금 기록이 덜 들어왔으면 틀린 값일 수 있다.
+  if(el){
+    const told=heldDeclared(t)!=null;
+    el.innerHTML=won(told?heldCash(t):leftOf(t))+unit+
+      (told?'':'<span class="auto calc">계산</span>');
+  }
   paintChangeInput();
 }
 // 잔돈 칸 — 지폐를 세지 않고 총액만 적는 길.
@@ -3221,8 +3236,8 @@ function paintChangeHint(){
   const t=tripById(currentId);
   hint.textContent=!t?''
     :denomSum(t)?'지폐를 세어 넣어 이 값은 안 씁니다'
-    :t.change?'적어 둔 값을 씁니다 (비우면 자동)'
-    :'';
+    :t.change?'적어 둔 값을 씁니다 (비우면 계산값)'
+    :'안 적으면 기록으로 계산한 값을 씁니다 — 세어 보고 적으면 더 정확합니다';
 }
 function paintChangeInput(){
   const el=document.getElementById('c-change');
@@ -3230,6 +3245,12 @@ function paintChangeInput(){
   if(!el||el===document.activeElement)return;   // 치는 중에는 값을 안 건드린다
   const t=tripById(currentId);
   el.value=t?(t.change||''):'';
+  // 값은 **절대 자동으로 채우지 않는다** (채우면 '직접 적은 값' 이 되어 버린다).
+  // 대신 지금 쓰이는 계산값을 흐린 글씨로 보여 준다 (2026-08-09 사용자 지시).
+  if(t&&heldDeclared(t)==null){
+    const cur=cashOf(t).cur||'';
+    el.placeholder=won(leftOf(t))+(cur==='KRW'?'원':(cur?' '+cur:''))+' (계산값)';
+  }else el.placeholder='총액만 적어도 됩니다';
 }
 // 적은 값은 통화를 붙여 t.change 에 담는다 — 목록의 '잔돈' 칸이 그대로 쓴다
 function setChangeAmt(v){
