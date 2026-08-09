@@ -1253,7 +1253,7 @@
       <!-- 지폐를 일일이 세지 않고 총액만 적고 싶을 때. 아래 권종을 세어 넣으면 그쪽이 이긴다 -->
       <div class="drow chg">
         <span class="du">잔돈 (총액)</span>
-        <input id="c-change" inputmode="numeric" placeholder="예: 6,000"
+        <input id="c-change" inputmode="numeric" placeholder="비우면 자동 계산"
                oninput="setChangeAmt(this.value)" autocomplete="off">
         <span class="da" id="c-change-hint"></span>
       </div>
@@ -3175,8 +3175,12 @@ function paintChangeInput(){
   if(!el||el===document.activeElement)return;
   const t=tripById(currentId);
   el.value=t?(t.change||''):'';
+  // 왜 자동이 아닌지 그 자리에서 알려준다 — 목록에 '자동' 배지가 안 붙는 이유가 여기 있다
   const hint=document.getElementById('c-change-hint');
-  if(hint)hint.textContent=(t&&denomSum(t))?'지폐를 세어 넣어 이 값은 안 씁니다':'';
+  if(hint)hint.textContent=!t?''
+    :denomSum(t)?'지폐를 세어 넣어 이 값은 안 씁니다'
+    :t.change?'적어 둔 값을 씁니다 (비우면 자동)'
+    :'';
 }
 // 적은 값은 통화를 붙여 t.change 에 담는다 — 목록의 '잔돈' 칸이 그대로 쓴다
 function setChangeAmt(v){
