@@ -1236,6 +1236,9 @@
         <input class="i-date" id="x-date" type="date">
         <input class="i-amt" id="x-fx" type="text" inputmode="numeric" placeholder="받은 현지 금액">
         <input class="i-amt" id="x-krw" type="text" inputmode="numeric" placeholder="낸 원화">
+        <!-- 환율은 둘을 다 적으면 저절로 나오지만, 하나만 알 때는 직접 적을 수 있어야 한다.
+             소수를 쳐야 하므로 inputmode 는 decimal — numeric 이면 쉼표가 끼어든다 -->
+        <input class="i-amt" id="x-rate" type="text" inputmode="decimal" placeholder="환율 (자동)">
         <input class="i-name" id="x-memo" placeholder="메모 (예: 공항 환전소)" autocomplete="off">
         <button class="i-add" onclick="addEx()">추가</button>
       </div>
@@ -1747,12 +1750,23 @@ const airlineOf=t=>{
 // 지출이 환전보다 많으면 남은 돈은 없다 → 0.
 // 지금 가진 현금(현지화폐) — 지폐를 세어 넣었으면 그 합계, 아니면 잔돈 칸에 직접 적은 값.
 // 둘은 같은 것을 말한다 (세느냐, 총액만 적느냐의 차이). 2026-08-09 사용자 선택.
-const heldCash=t=>denomSum(t)||numify(t.change)||0;
-// 남은 현금을 숫자로. changeOf 는 이걸 글자로 만들어 보여준다.
+// 사용자가 '지금 가진 현금'을 밝혔는가 — 지폐를 세었거나 잔돈 칸에 적었으면 그 값, 아니면 null.
+// null(안 밝힘)과 0(없다고 밝힘)은 다르다. 이걸 뭉개면 안 센 것을 '안 맞음'이라 하게 된다.
+const heldDeclared=t=>{
+  const d=denomSum(t); if(d)return d;
+  const n=numify(t.change); return n==null?null:n;
+};
+const heldCash=t=>heldDeclared(t)||0;
+// 이 여행이 끝났을 때 남은 현금(현지화폐).
+// 밝힌 값이 있으면 **그 값을 믿는다** — 예전엔 max(권종,계산값) 이라
+// 5,000 만 세었는데 9,000 이라고 우겼다. 다르면 검증이 '안 맞음'으로 말해 주면 된다.
+// 안 밝혔으면 기록으로 계산한다: 환전 + 지난 여행에서 가져온 현금 − 현금 지출.
+// 음수도 그대로 둔다 — 가져온 현금을 아직 안 넣었다는 뜻이고, 목록에서 −로 상쇄된다.
 const leftOf=t=>{
-  const c=cashOf(t);
-  const inTot=(c.ex||[]).reduce((s,e)=>s+(e.fx||0),0);   // 환전 + 지난 여행에서 가져온 현금
-  return Math.max(heldCash(t),inTot-cashUsed(t),0);
+  const d=heldDeclared(t);
+  if(d!=null)return d;
+  const inTot=(cashOf(t).ex||[]).reduce((s,e)=>s+(e.fx||0),0);
+  return inTot-cashUsed(t);
 };
 // 지난 여행에서 들고 와 이번에 쓴 현금
 const carryInOf=t=>(cashOf(t).ex||[]).filter(e=>e.carry).reduce((s,e)=>s+(e.fx||0),0);
@@ -1761,14 +1775,14 @@ const carryInOf=t=>(cashOf(t).ex||[]).filter(e=>e.carry).reduce((s,e)=>s+(e.fx||
 // (2026-08-09 사용자 지시). 직접 적은 값이 있으면 그것을 '남긴 돈'으로 삼는다.
 const changeOf=t=>{
   if(typeof cashOf!=='function')return {txt:'',auto:false};
-  const typed=t.change?numify(t.change):null;
-  if(t.change&&typed==null)return {txt:t.change,auto:false};   // 숫자가 아닌 메모는 그대로 둔다
+  if(t.change&&numify(t.change)==null)return {txt:t.change,auto:false};  // 숫자가 아닌 메모는 그대로
   const cur=cashOf(t).cur||t.cur||'';
   const unit=cur==='KRW'?'원':(cur?' '+cur:'');
-  const left=(typed!=null)?typed:leftOf(t);
-  const net=left-carryInOf(t);
+  // 안 밝혔을 때는 이월이 저절로 상쇄돼 결국 '환전 − 현금 지출' 이 된다.
+  // 그래서 여행을 죽 더하면 지금 손에 있는 현금이 나온다.
+  const net=leftOf(t)-carryInOf(t);
   if(!net)return {txt:'',auto:false};
-  return {txt:(net>0?'+':'−')+won(Math.abs(net))+unit,auto:(typed==null)};
+  return {txt:(net>0?'+':'−')+won(Math.abs(net))+unit,auto:(heldDeclared(t)==null)};
 };
 const itemsSum=t=>(t.items||[]).reduce((s,i)=>s+(i.amount||0),0);
 // 여행금액: 상세 내역이 있으면 그 합계가 곧 여행금액 (자동 계산)
@@ -3065,15 +3079,29 @@ function addCarryIn(){
       toast('가져온 현금을 넣었습니다');
     });
 }
+// 현지금액 · 원화 · 환율 셋 중 **둘만 적으면 나머지가 채워진다.**
+// 트래블카드처럼 한 번 환전해 두고 일부는 현금으로, 일부는 카드로 쓰는 경우
+// 원화를 모르고 환율만 아는 일이 흔하다 (2026-08-09 사용자 지시).
+// 셋 다 적으면 적은 그대로 둔다 — 수수료 때문에 딱 안 떨어질 수 있어 사용자 값을 존중한다.
 function addEx(){
   const t=tripById(currentId);if(!t)return;
-  const fx=numify(document.getElementById('x-fx').value);
-  const krw=numify(document.getElementById('x-krw').value);
-  if(!fx&&!krw){document.getElementById('x-fx').focus();return;}
-  cashOf(t).ex.push({date:document.getElementById('x-date').value,fx:fx||0,krw:krw||0,
-    rate:(fx&&krw)?krw/fx:null,memo:document.getElementById('x-memo').value.trim()});
-  ['x-fx','x-krw','x-memo'].forEach(id=>document.getElementById(id).value='');
-  save();renderCash();toast('환전 내역을 추가했습니다');
+  const el=id=>document.getElementById(id);
+  let fx=numify(el('x-fx').value);
+  let krw=numify(el('x-krw').value);
+  // 환율은 0.0854 처럼 소수라 numify(반올림)를 쓰면 안 된다
+  const rateIn=(v=>{const n=Number(String(v).replace(/[^\d.]/g,''));return n>0?n:null;})(el('x-rate').value);
+  if(!fx&&!krw){el('x-fx').focus();return;}
+  // 원화는 소수점이 없으므로 반올림해 정수로 담는다.
+  // 현지 금액 칸도 숫자만 받으므로(쉼표 자동) 정수다. 환율만 소수를 그대로 지킨다.
+  if(rateIn){
+    if(fx&&!krw)krw=Math.round(fx*rateIn);
+    else if(krw&&!fx)fx=Math.round(krw/rateIn);
+  }
+  const rate=rateIn||((fx&&krw)?krw/fx:null);
+  cashOf(t).ex.push({date:el('x-date').value,fx:fx||0,krw:krw||0,rate,
+    memo:el('x-memo').value.trim()});
+  ['x-fx','x-krw','x-rate','x-memo'].forEach(id=>el(id).value='');
+  save();renderCash();render();toast('환전 내역을 추가했습니다');
 }
 function openExForm(i){
   const t=tripById(currentId);if(!t)return;
@@ -3371,26 +3399,42 @@ function renderCashCheck(){
   const dsum=heldCash(t);
   const used=cashUsed(t), expect=exTot-used, diff=dsum-expect, r=avgRate(t);
   const okAll=c.ex.length>0;
-  const state=!okAll?'':(diff===0?'ok':'bad');
+  // 지폐를 세지도, 잔돈을 적지도 않았으면 아직 '모르는' 것이지 '안 맞는' 것이 아니다.
+  // 예전엔 이걸 0 원 가지고 있다는 주장으로 받아 늘 '안 맞음' 이라 했다 (사용자 지적).
+  const told=heldDeclared(t)!=null;
+  const state=(!okAll||!told)?'':(diff===0?'ok':'bad');
   box.className='check '+state+(checkOpen?' open':'');
-  const note=okAll
-    ? (diff===0?'딱 맞습니다 — 거스름돈도 빠짐없이 받았어요'
-      // 환전한 것보다 많이 썼다면 대개 지난 여행에서 남은 현금을 들고 온 것이다.
-      // 그 경우엔 '안 적은 환전' 이 아니라 가져온 현금을 넣어야 맞는다.
-      :(expect<0&&!carry
-        ?`환전한 것보다 ${won(-expect)}${unit} 더 썼습니다 — <b>지난 여행에서 가져온 현금</b>일 수 있습니다.<br>`+
-         `<span class="bp">여기에 잔돈을 적으면 차이가 오히려 커집니다 — 아래 단추로 넣어 주세요.</span>`
-       :diff>0?`가진 돈이 ${won(diff)}${unit} 더 많습니다 — 안 적은 환전이 있거나 지출을 더 적었어요`
-              :`가진 돈이 ${won(-diff)}${unit} 모자랍니다 — 안 적은 지출이 있거나 거스름돈을 덜 받았어요`))
-    : (used
+  const note=!okAll
+    ? (used
         ? `현금으로 ${won(used)}${unit} 썼는데 <b>환전 기록이 없습니다</b> — 넣으면 맞는지 확인해 드립니다`
-        : '환전 기록을 넣으면 잔액이 맞는지 확인해 드립니다');
+        : '환전 기록을 넣으면 잔액이 맞는지 확인해 드립니다')
+    : !told
+    ? (expect<0&&!carry
+        ?`환전한 것보다 ${won(-expect)}${unit} 더 썼습니다 — <b>지난 여행에서 가져온 현금</b>일 수 있습니다.<br>`+
+         `<span class="bp">아래 단추로 넣어 주세요.</span>`
+        :`계산으로는 <b>${won(expect)}${unit}</b> 남아 있어야 합니다 — `+
+         `<span class="bp">「가진 현금」에 세어 넣거나 총액만 적으면 맞는지 확인해 드립니다.</span>`)
+    // 여기부터는 가진 현금을 밝힌 경우 — 이제야 '맞다/안 맞다' 를 말할 수 있다
+    : diff===0
+    ? '딱 맞습니다 — 거스름돈도 빠짐없이 받았어요'
+    // 환전한 것보다 많이 썼다면 대개 지난 여행에서 남은 현금을 들고 온 것이다.
+    // 그 경우엔 '안 적은 환전' 이 아니라 가져온 현금을 넣어야 맞는다.
+    : (expect<0&&!carry)
+    ? `환전한 것보다 ${won(-expect)}${unit} 더 썼습니다 — <b>지난 여행에서 가져온 현금</b>일 수 있습니다.<br>`+
+      `<span class="bp">아래 단추로 넣어 주세요.</span>`
+    : diff>0
+    ? `가진 돈이 ${won(diff)}${unit} 더 많습니다 — 안 적은 환전이 있거나 지출을 더 적었어요`
+    : `가진 돈이 ${won(-diff)}${unit} 모자랍니다 — 안 적은 지출이 있거나 거스름돈을 덜 받았어요`;
   // 접혀 있어도 맞는지 틀린지는 한눈에 읽혀야 한다
-  const badge=!okAll?['none','확인 안 됨']:(diff===0?['ok','맞음']:['bad','안 맞음']);
+  const badge=!okAll?['none','확인 안 됨']
+             :!told?['none','확인 전']
+             :(diff===0?['ok','맞음']:['bad','안 맞음']);
   box.innerHTML=
     `<button class="chead" onclick="toggleCheck()" aria-expanded="${checkOpen}">`+
-      `<span class="clab">차이 <span class="cbadge ${badge[0]}">${badge[1]}</span></span>`+
-      `<span class="cval ${state}">${okAll?`${diff===0?'0':won(diff)}${unit}`:'—'}</span>`+
+      `<span class="clab">${okAll&&!told?'남아야 할 금액':'차이'} `+
+        `<span class="cbadge ${badge[0]}">${badge[1]}</span></span>`+
+      // 안 밝혔으면 차이를 말할 수 없다. 대신 '남아야 할 금액' 을 보여준다
+      `<span class="cval ${state}">${!okAll?'—':!told?`${won(expect)}${unit}`:`${diff===0?'0':won(diff)}${unit}`}</span>`+
       `<span class="ccar">${checkOpen?'⌃':'⌄'}</span>`+
     `</button>`+
     // 지난 여행 돈을 들고 가는 일은 차이가 나든 안 나든 생긴다 (가져와 쓰고도 또 남을 수 있다).
