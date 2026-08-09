@@ -203,10 +203,6 @@
   .chev{color:var(--muted);font-weight:400}
   .auto{display:inline-block;margin-left:5px;font-size:.6rem;font-weight:700;color:var(--accent);
     background:var(--accent-soft);border-radius:5px;padding:2px 5px;vertical-align:middle;letter-spacing:0}
-  /* '계산' 은 확인된 값이 아니라 기록에서 미루어 본 값 — 파랑이 아니라 회색으로 낮춘다 */
-  .auto.calc{color:var(--muted);background:rgba(118,118,128,.12)}
-  /* '가진 현금' 제목줄 안에서는 다른 규칙이 여백을 9px 로 키운다 — 여기만 콕 집어 되돌린다 */
-  #den-tot .auto{font-size:.6rem;padding:2px 5px;line-height:1.25;margin-left:6px}
 
   /* ---- 상세 화면 ---- */
   .view{display:none}
@@ -492,22 +488,6 @@
   .drow.sum{border-bottom:0;border-top:.5px solid var(--line);margin-top:3px;
     padding-top:13px;font-weight:600}
   .drow.sum .da{color:var(--ink);font-size:1rem;font-weight:600}
-  /* 잔돈(총액) 줄 — 권종 장수 칸(74px)에는 '6,000 IDR' 이 안 들어간다.
-     라벨과 입력칸 **두 칸만** 쓴다. 안내를 같은 줄 세 번째 칸에 두었더니
-     좁은 폭에서 칸들을 밀어 라벨과 입력칸이 겹쳤다 (2026-08-09 사용자 지적). */
-  /* 아래 권종 줄과 **같은 격자**를 쓴다 — 그래야 입력칸이 세로로 맞는다.
-     다만 '6,000 IDR' 은 74px 에 안 들어가므로 2~3번 칸을 함께 쓴다 */
-  /* #denoms 가 좌우 14px 안쪽 여백을 갖는다 — 같은 여백을 줘야 칸이 세로로 맞는다 */
-  .chgbox{padding:0 14px;border-bottom:.5px solid var(--line)}
-  /* 라벨은 제 폭만 쓰고 입력칸이 남은 자리를 다 먹는다 —
-     오른쪽 끝은 위의 세그먼트·아래 합계와 같은 세로선에 선다 */
-  .drow.chg{grid-template-columns:auto minmax(0,1fr);border-bottom:0}
-  /* 넓은 화면에서 칸이 1,200px 로 늘어나 혼자 튀었다. 오른쪽 끝에 붙이고 폭을 묶는다 —
-     아래 권종 줄들과 같은 자리에 서고, 좁은 화면에서는 그대로 꽉 찬다 */
-  .drow.chg input{text-align:right;justify-self:end;width:100%;max-width:220px}
-  .chghint{font-size:.72rem;line-height:1.35;color:var(--muted);
-    padding:0 2px 9px;margin-top:-4px}
-  .chghint:empty{display:none}
   .drow.addd{border-bottom:0}
   .drow.addd .du{color:var(--muted)}
   .drow.addd input{text-align:left}
@@ -1093,7 +1073,7 @@
     </div>
   </section>
 
-  <p class="foot-note"><span class="bstamp">v1.0 · 2026.08.09 · v19</span>기기에 자동 저장됩니다 · 기기를 옮길 땐 <b>백업/복원</b><br>
+  <p class="foot-note"><span class="bstamp">v1.0 · 2026.08.09 · v20</span>기기에 자동 저장됩니다 · 기기를 옮길 땐 <b>백업/복원</b><br>
     엑셀로 적어둔 표는 <b>입력 서식</b>을 받아 채운 뒤 <b>복원</b>으로 올리세요</p>
  </div>
 </div>
@@ -1270,16 +1250,6 @@
       <div class="csub">
         <span class="cft">가진 현금 <b class="cftot" id="den-tot">0</b>
           <small>세어 넣거나 총액만 적으면 됩니다</small></span>
-      </div>
-      <!-- 지폐를 일일이 세지 않고 총액만 적고 싶을 때. 아래 권종을 세어 넣으면 그쪽이 이긴다 -->
-      <div class="chgbox">
-        <div class="drow chg">
-          <span class="du">잔돈 (총액)</span>
-          <input id="c-change" inputmode="numeric" placeholder="비우면 자동 계산"
-                 oninput="setChangeAmt(this.value)" autocomplete="off">
-        </div>
-        <!-- 안내는 아랫줄로. 같은 줄에 두면 좁은 폭에서 라벨과 입력칸을 밀어 겹친다 -->
-        <div class="chghint" id="c-change-hint"></div>
       </div>
       <div class="denoms" id="denoms"></div>
     </div>
@@ -1517,7 +1487,6 @@
       <div class="field"><label>1박 평균 숙박 (원)</label><input id="f-lodge" type="text" inputmode="numeric" placeholder="비우면 지출에서 자동"></div>
       <div class="field"><label id="f-cur-lab">현지 통화</label><select id="f-cur" onchange="pickCur()"></select></div>
     </div>
-    <div class="field full"><label>잔돈</label><input id="f-change" placeholder="비우면 현금 화면의 '지금 가진 현금'" autocomplete="off"></div>
     <div class="calc" id="calc-preview"></div>
     <div class="sheet-actions">
       <button class="del" id="del-btn" style="display:none" onclick="removeTrip()">삭제</button>
@@ -1770,10 +1739,10 @@ const airlineOf=t=>{
 // 둘은 같은 것을 말한다 (세느냐, 총액만 적느냐의 차이). 2026-08-09 사용자 선택.
 // 사용자가 '지금 가진 현금'을 밝혔는가 — 지폐를 세었거나 잔돈 칸에 적었으면 그 값, 아니면 null.
 // null(안 밝힘)과 0(없다고 밝힘)은 다르다. 이걸 뭉개면 안 센 것을 '안 맞음'이라 하게 된다.
-const heldDeclared=t=>{
-  const d=denomSum(t); if(d)return d;
-  const n=numify(t.change); return n==null?null:n;
-};
+// 지금 가진 현금 = **권종을 세어 넣은 것만**. 안 넣었으면 null (0 이 아니다 — 모르는 것이다).
+// 예전엔 '잔돈(총액)' 칸도 있었으나 같은 값을 두 곳에서 묻는 셈이라 없앴다
+// (2026-08-09 사용자 선택). 목록·권종 목록에 없는 단위는 「권종 추가」로 만든다.
+const heldDeclared=t=>{const d=denomSum(t);return d?d:null;};
 const heldCash=t=>heldDeclared(t)||0;
 // 이 여행이 끝났을 때 남은 현금(현지화폐).
 // 밝힌 값이 있으면 **그 값을 믿는다** — 예전엔 max(권종,계산값) 이라
@@ -1797,9 +1766,8 @@ const carryInOf=t=>(cashOf(t).ex||[]).filter(e=>e.carry).reduce((s,e)=>s+(e.fx||
 // 밝힌 값에서 지난 여행에서 가져다 쓴 돈을 뺀다 — 남기면 +, 가져다 쓰면 −.
 const changeOf=t=>{
   if(typeof cashOf!=='function')return {txt:'',auto:false};
-  if(t.change&&numify(t.change)==null)return {txt:t.change,auto:false};  // 숫자가 아닌 메모는 그대로
   const d=heldDeclared(t);
-  if(d==null)return {txt:'',auto:false};        // 안 밝혔으면 빈칸
+  if(d==null)return {txt:'',auto:false};        // 안 세었으면 빈칸
   const cur=cashOf(t).cur||t.cur||'';
   const unit=cur==='KRW'?'원':(cur?' '+cur:'');
   const net=d-carryInOf(t);
@@ -3222,44 +3190,13 @@ function paintDenomTotal(){
   // 세지도 적지도 않았으면 '—'. 0 이라 하면 '없다' 는 주장이 되고,
   // 계산값을 넣으면 확인하지도 않은 값을 가진 돈이라 말하게 된다.
   // 계산값은 검증 상자의 '남아야 할 금액' 에서만 본다 (2026-08-09 사용자 선택).
+  // 안 세었으면 '—'. 0 이라 하면 '없다' 는 주장이 되고,
+  // 계산값을 넣으면 확인하지도 않은 값을 가진 돈이라 말하게 된다.
+  // 계산값은 검증 상자의 '남아야 할 금액' 에서만 본다.
   if(el){
     const d=heldDeclared(t);
     el.textContent=(d==null)?'—':won(d)+unit;
   }
-  paintChangeInput();
-}
-// 잔돈 칸 — 지폐를 세지 않고 총액만 적는 길.
-// 치는 동안에는 값을 건드리지 않는다 (건드리면 커서가 튄다).
-// 왜 자동이 아닌지 그 자리에서 알려준다 — 목록에 '자동' 배지가 안 붙는 이유가 여기 있다.
-// 칸 값과 따로 두는 이유: 치는 중에는 값은 건드리면 안 되지만 안내는 바로 바뀌어야 한다.
-function paintChangeHint(){
-  const hint=document.getElementById('c-change-hint');
-  if(!hint)return;
-  const t=tripById(currentId);
-  hint.textContent=!t?''
-    :denomSum(t)?'지폐를 세어 넣어 이 값은 안 씁니다'
-    :t.change?'적어 둔 값을 씁니다'
-    :'';
-}
-function paintChangeInput(){
-  const el=document.getElementById('c-change');
-  paintChangeHint();
-  if(!el||el===document.activeElement)return;   // 치는 중에는 값을 안 건드린다
-  const t=tripById(currentId);
-  el.value=t?(t.change||''):'';
-  // 값도 안내도 계산값을 권하지 않는다 — 적은 것만 잔돈으로 쓰기 때문이다
-  el.placeholder='총액만 적어도 됩니다';
-}
-// 적은 값은 통화를 붙여 t.change 에 담는다 — 목록의 '잔돈' 칸이 그대로 쓴다
-function setChangeAmt(v){
-  const t=tripById(currentId);if(!t)return;
-  const n=numify(v), cur=cashOf(t).cur||'';
-  t.change=n?(won(n)+(cur==='KRW'?'원':(cur?' '+cur:''))):'';
-  saveSoon();
-  renderCashCheck();
-  paintChangeHint();          // 치는 즉시 '적어 둔 값을 씁니다 / (비우면 자동)' 이 바뀐다
-  const el=document.getElementById('den-tot');
-  if(el)el.textContent=won(heldCash(t))+(cur==='KRW'?'원':(cur?' '+cur:''));
 }
 
 // 금액 표시(각 줄 오른쪽 · 합계)만 갈아끼운다
@@ -4734,7 +4671,6 @@ function openForm(id){
   document.getElementById('f-air').value=t?won(t.air):'';
   document.getElementById('f-airline').value=t?t.airline||'':'';
   document.getElementById('f-lodge').value=t?won(t.lodge):'';
-  document.getElementById('f-change').value=t?t.change||'':'';
   fillCurSelect(t);
   updateCalc();
   document.getElementById('backdrop').classList.add('on');
@@ -4774,7 +4710,6 @@ function readForm(){
     air:numify(document.getElementById('f-air').value),
     airline:document.getElementById('f-airline').value.trim(),
     lodge:numify(document.getElementById('f-lodge').value),
-    change:document.getElementById('f-change').value.trim(),
     country:document.getElementById('f-country').value.trim(),
   };
 }
@@ -4899,7 +4834,7 @@ function xlsxBlob(sheets){
 // (같은 곳을 세 번 간 여행이 하나로 뭉쳤다).
 // CSV 는 한 장이라 여행 정보를 줄마다 함께 적는다. '잔돈' 도 여기 있어야
 // 백업 → 복원에서 손으로 적어 둔 잔돈이 살아 돌아온다 (엑셀만 넣고 여기를 빠뜨렸었다).
-const ITEM_HEAD=['여행지','나라','시작','종료','인원','잔돈',
+const ITEM_HEAD=['여행지','나라','시작','종료','인원',
   '대분류','중분류','소분류','날짜','원화','환율','현지화폐','상호명','결제유형','수수료','캐시백','비고'];
 // CSV 는 한 장이라 환전표에도 여행 시작일이 있어야 한다 —
 // 같은 곳을 여러 번 가면 이름만으로는 어느 여행의 환전인지 못 가른다
@@ -4908,7 +4843,7 @@ const EX_HEAD=['여행지','시작','날짜','현지 금액','원화','통화'];
 function itemRows(){
   const r=[ITEM_HEAD];
   trips.forEach(t=>(t.items||[]).forEach(i=>r.push([t.dest,
-    t.country||'', t.start||'', t.end||'', t.people??null, t.change||'',
+    t.country||'', t.start||'', t.end||'', t.people??null,
     i.maj||'', i.mid||i.cat||'', i.min||i.name||'', i.date||'',
     i.amount??null, i.rate??null, i.fx??null,
     i.merchant||'', i.pay||'', i.fee||null, i.cashback||null, i.note||''])));
@@ -4981,8 +4916,8 @@ function tripSheet(o){
   // 그래서 백업했다 복원하면 손으로 적어 둔 잔돈이 사라졌다. 맨 뒤에 붙이므로
   // 이 열이 없는 옛 파일도 그대로 읽힌다 (제목 줄 이름으로 맞춰 읽는다).
   return {name:o.name,rows:[
-    ['여행지','나라','시작','종료','인원','잔돈'],
-    [o.dest||'',o.country||'',o.start||'',o.end||'',o.people||'',o.change||''],
+    ['여행지','나라','시작','종료','인원'],
+    [o.dest||'',o.country||'',o.start||'',o.end||'',o.people||''],
     [],
     ['날짜','현지 금액','원화','통화'],
     ...(o.ex||[]),
@@ -5018,7 +4953,6 @@ function tripSheets(){
     return tripSheet({
       name:sheetNameFor(t,used),
       dest:t.dest||'', country:t.country||'', start:t.start||'', end:t.end||'', people:t.people??'',
-      change:t.change||'',
       ex:(c.ex||[]).map(e=>[e.date||'',e.fx??null,e.krw??null,e.cur||c.cur||'']),
       items:(t.items||[]).map(i=>[i.maj||'', i.mid||i.cat||'', i.min||i.name||'', i.date||'',
         i.amount??null, i.rate??null, i.fx??null, i.merchant||'', i.pay||'',
@@ -5208,9 +5142,9 @@ const BLK={
         fieldOf:h=>tripFieldOf(h)},
   // '잔돈' 도 표준 열에 있어야 한다 — 여기서 빠지면 normBlock 이 걸러버려
   // importItemTable 까지 값이 도착하지 못한다 (CSV 왕복에서 잔돈이 사라졌다)
-  item:{head:['여행지','나라','시작','종료','인원','잔돈','대분류','중분류','소분류','날짜','원화','환율',
+  item:{head:['여행지','나라','시작','종료','인원','대분류','중분류','소분류','날짜','원화','환율',
               '현지화폐','상호명','결제유형','수수료','캐시백','비고','분류'],
-        fields:['dest','country','start','end','people','change','maj','mid','name','date','krw','rate',
+        fields:['dest','country','start','end','people','maj','mid','name','date','krw','rate',
                 'fx','merchant','pay','fee','cashback','note','cat'],
         fieldOf:h=>itemFieldOf(h)},
   ex:  {head:['여행지','시작','날짜','현지 금액','원화','통화'],
@@ -5436,7 +5370,6 @@ function itemFieldOf(h){
   if(/^시작|^출발일?$|^start/.test(t))return 'start';
   if(/^종료|^도착일?$|^귀국|^end/.test(t))return 'end';
   if(/^인원$|^명수$|^people$|^pax$/.test(t))return 'people';
-  if(/^잔돈$|^change$/.test(t))return 'change';
   if(/^(날짜|일자|date)$/.test(t))return 'date';
   if(/대분류/.test(t))return 'maj';
   if(/중분류/.test(t))return 'mid';
@@ -5544,7 +5477,6 @@ function importItemTable(rows,fname,done){
     put('start',st);
     put('end',cellDate(get(row,'end')));
     put('people',cellNum(get(row,'people'))||'');
-    put('change',get(row,'change'));
     info.set(dest,m);
     const krw=cellNum(get(row,'krw')), fx=cellNum(get(row,'fx'));
     if(!krw&&!fx){skipped++;return;}
@@ -5599,7 +5531,7 @@ function importItemTable(rows,fname,done){
           t={id:newTripId(n),dest:nm,country:m.country||'',
              start:m.start||ds[0]||'',end:m.end||ds[ds.length-1]||'',
              amount:null,people:m.people||null,air:null,airline:'',lodge:null,
-             change:m.change||'',items:[],cash:null};
+             change:'',items:[],cash:null};
           trips.push(t);
           importMap.set(dest,t.id);
         }
