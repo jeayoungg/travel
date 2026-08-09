@@ -1185,7 +1185,7 @@
     </div>
   </section>
 
-  <p class="foot-note"><span class="bstamp">v1.0 · 2026.08.09 · v32</span>기기에 자동 저장됩니다 · 기기를 옮길 땐 <b>백업/복원</b><br>
+  <p class="foot-note"><span class="bstamp">v1.0 · 2026.08.09 · v33</span>기기에 자동 저장됩니다 · 기기를 옮길 땐 <b>백업/복원</b><br>
     엑셀로 적어둔 표는 <b>입력 서식</b>을 받아 채운 뒤 <b>복원</b>으로 올리세요</p>
  </div>
 </div>
@@ -5237,10 +5237,22 @@ function exRowsFlat(){
     (c.ex||[]).forEach(e=>r.push([t.dest,t.start||'',e.date||'',e.fx??null,e.krw??null,e.cur||c.cur||'']));});
   return r.length>1?r:null;
 }
-// 지출표 + 빈 줄 + 환전표. 빈 줄이 표를 가르므로 한 파일로 둘 다 담긴다
+// 영수증 품목을 한 장짜리 표로 편다. CSV 는 시트가 없으니
+// 어느 여행·어느 지출의 품목인지를 줄마다 함께 적어야 다시 붙일 수 있다
+function subRowsFlat(){
+  const r=[BLK.sub.head];
+  trips.forEach(t=>(t.items||[]).forEach(i=>(i.sub||[]).forEach(x=>
+    r.push([t.dest,t.start||'',i.date||'',i.min||i.name||'',x.name||'',
+            x.qty??1,x.unit??null,x.fx??null,x.krw??null,x.cat||'']))));
+  return r.length>1?r:null;
+}
+// 지출표 + 빈 줄 + 환전표 + 빈 줄 + 품목표. 빈 줄이 표를 가르므로 한 파일에 다 담긴다
 function csvRows(){
-  const ex=exRowsFlat();
-  return ex?[...itemRows(),[],...ex]:itemRows();
+  const ex=exRowsFlat(), sub=subRowsFlat();
+  let r=itemRows();
+  if(ex)r=[...r,[],...ex];
+  if(sub)r=[...r,[],...sub];
+  return r;
 }
 
 // ---- 백업/복원/내보내기 ----
@@ -5253,10 +5265,10 @@ function openBackup(){
     `<div class="pick">`+
     `<button onclick="doBackup('xlsx')"><b>📗 엑셀 (.xlsx)</b>`+
       `<span>여행마다 한 장 — <b>입력 서식과 같은 모양</b>. 고쳐서 그대로 복원할 수 있지만 `+
-      `<b>권종과 영수증 품목은 담기지 않습니다</b></span></button>`+
+      `<b>권종(지폐 장수)은 담기지 않습니다</b></span></button>`+
     `<button onclick="doBackup('csv')"><b>CSV</b>`+
-      `<span>한 장에 지출과 환전을 함께. 어디서나 열리지만 `+
-      `<b>권종과 영수증 품목은 담기지 않습니다</b></span></button>`+
+      `<span>한 장에 지출·환전·영수증 품목을 함께. 어디서나 열리지만 `+
+      `<b>권종(지폐 장수)은 담기지 않습니다</b></span></button>`+
     `<button onclick="doBackup('json')"><b>💾 완전 백업 (.json)</b>`+
       `<span>권종·통화 설정까지 하나도 빠짐없이. 기기를 옮길 땐 이걸 쓰세요</span></button>`+
     `</div>`,'',()=>{});
@@ -5282,7 +5294,8 @@ function doBackup(kind){
       ['여행 이름은 시트 안의 「여행지」 칸을 씁니다 — 시트 이름을 바꿔도 됩니다.'],
       [],
       ['권종(지폐 장수)과 숨긴 권종은 엑셀에 담기지 않습니다.'],
-      ['영수증의 품목 내역(한 지출 안에 적어 둔 여러 품목)도 담기지 않습니다.'],
+      ['영수증에 품목을 적어 두었다면 시트 맨 아래에 「품목」 표로 함께 담깁니다.'],
+      ['그 표의 「지출날짜·지출항목」 은 어느 지출의 품목인지 찾는 열쇠라 고치지 마세요.'],
       ['기기를 옮길 때는 완전 백업(.json)을 쓰세요.'],
     ]}, ...tripSheets()]),`여행경비_${day}.xlsx`);
   toast(`엑셀을 받았습니다 — 여행 ${trips.length}건`);
@@ -5312,6 +5325,11 @@ function tripSheet(o){
     cut(['대분류','중분류','소분류','날짜','원화','환율','현지화폐',
          '상호명','결제유형','수수료','캐시백','비고']),
     ...(o.items||[]).map(cut),
+    // 영수증 품목 — 있을 때만 붙인다. 없으면 빈 표가 덩그러니 남는다.
+    // 어느 지출에 붙는지는 '지출날짜 + 지출항목' 으로 다시 찾는다
+    ...((o.subs&&o.subs.length)?[[],
+      ['지출날짜','지출항목','품목명','수량','단가','현지금액','원화','분류'],
+      ...o.subs]:[]),
   ]};
 }
 // 엑셀 시트 이름 규칙 — 31자 · []:*?/\ 금지 · 한 파일 안에서 겹치면 안 된다.
@@ -5345,6 +5363,9 @@ function tripSheets(){
       items:(t.items||[]).map(i=>[i.maj||'', i.mid||i.cat||'', i.min||i.name||'', i.date||'',
         i.amount??null, i.rate??null, i.fx??null, i.merchant||'', i.pay||'',
         i.fee||null, i.cashback||null, i.note||'']),
+      subs:(t.items||[]).flatMap(i=>(i.sub||[]).map(x=>
+        [i.date||'', i.min||i.name||'', x.name||'', x.qty??1, x.unit??null,
+         x.fx??null, x.krw??null, x.cat||''])),
     });
   });
 }
@@ -5482,6 +5503,9 @@ function headKind(row){
   const dest=has(/^(여행지|목적지|여행명|도시|trip|dest)$/i);
   const date=has(/^(날짜|일자|date)$/i);
   const krw =has(/^(원화|krw|kwr)$/i);
+  // 품목표를 먼저 가른다 — 아래 kind 규칙이 '품목' 을 지출표로 잡아먹는다.
+  // '지출날짜·지출항목' 은 품목표에만 있는 열쇠 열이다
+  if(has(/^지출날짜$|^지출항목$/)&&has(/^품목명$|^품목$/))return 'sub';
   const kind=has(/^대분류|^중분류|^소분류|^분류$|^항목$|^상호|가맹|품목|^결제|^수수료$|^캐시백$/);
   const trip=has(/^(시작|시작일|출발|출발일|종료|종료일|도착|도착일|귀국|인원|명수|나라|국가)$/)
             ||has(/여행금액|항공|숙박|잔돈/);
@@ -5538,7 +5562,28 @@ const BLK={
   ex:  {head:['여행지','시작','날짜','현지 금액','원화','통화'],
         fields:['dest','start','date','fx','krw','cur'],
         fieldOf:h=>exFieldOf(h)},
+  // 영수증 품목 — 지출 하나 안에 여러 품목이 든 경우.
+  // 어느 지출에 붙일지 알아야 하므로 '지출날짜 + 지출항목' 을 함께 적는다.
+  sub: {head:['여행지','시작','지출날짜','지출항목','품목명','수량','단가','현지금액','원화','분류'],
+        fields:['dest','start','pdate','pname','name','qty','unit','fx','krw','cat'],
+        fieldOf:h=>subFieldOf(h)},
 };
+// 품목표 제목 줄 → 항목 이름. '지출날짜·지출항목' 은 붙일 지출을 찾는 열쇠다
+function subFieldOf(h){
+  const t=String(h||'').trim().replace(/\s+/g,'');
+  if(!t)return '';
+  if(/^여행지$|^목적지$|^여행명$/.test(t))return 'dest';
+  if(/^시작/.test(t))return 'start';
+  if(/^지출날짜$|^지출일자$/.test(t))return 'pdate';
+  if(/^지출항목$|^지출명$/.test(t))return 'pname';
+  if(/^품목명$|^품목$/.test(t))return 'name';
+  if(/^수량$|^개수$/.test(t))return 'qty';
+  if(/^단가$/.test(t))return 'unit';
+  if(/^현지금액$|^현지$/.test(t))return 'fx';
+  if(/^원화$/.test(t))return 'krw';
+  if(/^분류$|^카테고리$/.test(t))return 'cat';
+  return '';
+}
 function normBlock(kind,rows,defDest,force){
   const spec=BLK[kind];
   const map=rows[0].map(spec.fieldOf);
@@ -5602,7 +5647,7 @@ function sheetBlocks(rows,sheetName,used){
     key=def+KEYSEP+tag;
     used.add(key);
   }
-  const out={trip:[],item:[],ex:[],dest:def};
+  const out={trip:[],item:[],ex:[],sub:[],dest:def};
   blocks.forEach(b=>{out[b.kind]=out[b.kind].concat(normBlock(b.kind,b.rows,key,perTrip));});
   return out;
 }
@@ -5610,19 +5655,22 @@ function sheetBlocks(rows,sheetName,used){
 // 여러 시트를 모아 종류별로 한 번씩만 확인받는다 (여행이 몇 개든 창은 최대 세 번)
 function runBlocks(sheets,fname){
   importMap.clear();
-  const all={trip:[],item:[],ex:[]}, used=new Set();
+  const all={trip:[],item:[],ex:[],sub:[]}, used=new Set();
   sheets.forEach(s=>{
     const g=sheetBlocks(s.rows,s.name,used);
     if(!g)return;
     all.trip=all.trip.concat(g.trip);
     all.item=all.item.concat(g.item);
     all.ex=all.ex.concat(g.ex);
+    all.sub=all.sub.concat(g.sub||[]);
   });
   // 여행 → 지출 → 환전 순서. 앞을 넣어야 뒤가 여행을 찾을 수 있다
   const steps=[];
   if(all.trip.length)steps.push(['trip',[BLK.trip.head,...all.trip]]);
   if(all.item.length)steps.push(['item',[BLK.item.head,...all.item]]);
   if(all.ex.length)  steps.push(['ex',  [BLK.ex.head,  ...all.ex]]);
+  // 품목은 지출에 붙으므로 지출이 다 들어간 뒤에 넣는다
+  if(all.sub.length) steps.push(['sub', [BLK.sub.head, ...all.sub]]);
   if(!steps.length)throw new Error('알아볼 수 있는 표가 없습니다');
   const step=n=>{
     if(n>=steps.length)return;
@@ -5630,6 +5678,7 @@ function runBlocks(sheets,fname){
     try{
       if(kind==='trip')importTripTable(rows,fname,go);
       else if(kind==='item')importItemTable(rows,fname,go);
+      else if(kind==='sub')importSubTable(rows,fname,go);
       else importExTable(rows,fname,go);
     }catch(e){ go(); }
   };
@@ -5695,6 +5744,45 @@ function importExTable(rows,label,done){
       toast(`환전 ${n}건을 불러왔습니다`);
       if(done)done();
     });
+}
+
+// 영수증 품목 — 어느 지출에 붙일지는 '여행 + 지출날짜 + 지출항목' 으로 찾는다.
+// 지출이 먼저 다 들어간 뒤에 부른다 (runBlocks 가 순서를 지킨다).
+function importSubTable(rows,label,done){
+  const map=rows[0].map(subFieldOf);
+  const get=(row,f)=>{const i=map.indexOf(f);return i<0?'':String(row[i]??'').trim();};
+  // (여행 + 지출날짜 + 지출항목) 별로 품목을 모은다.
+  // ※ 열쇠를 한 줄로 이어 붙이면 안 된다 — 여행 이름표에 이미 KEYSEP 이 들어 있어
+  //   (`방콕방콕`) 다시 쪼갤 때 칸이 통째로 밀린다. 조각을 따로 들고 다닌다.
+  const byItem=new Map();
+  rows.slice(1).forEach(row=>{
+    const name=get(row,'name'); if(!name)return;
+    const dest=get(row,'dest'); if(!dest)return;
+    const st=cellDate(get(row,'start'));
+    const pdate=cellDate(get(row,'pdate')), pname=get(row,'pname');
+    const k=JSON.stringify([dest,st,pdate,pname]);
+    if(!byItem.has(k))byItem.set(k,{dest,st,pdate,pname,subs:[]});
+    byItem.get(k).subs.push({name,
+      qty:cellNum(get(row,'qty'))||1,
+      unit:cellNum(get(row,'unit'))||null,
+      fx:cellNum(get(row,'fx'))||null,
+      krw:cellNum(get(row,'krw'))||0,
+      cat:get(row,'cat')||''});
+  });
+  const total=[...byItem.values()].reduce((s,a)=>s+a.subs.length,0);
+  if(!total){if(done)done();return;}
+  let n=0, miss=0;
+  byItem.forEach(({dest,st,pdate,pname,subs})=>{
+    const t=(importMap.has(dest)?tripById(importMap.get(dest)):null)||findTripFor(destName(dest),st);
+    if(!t){miss+=subs.length;return;}
+    // 날짜와 항목 이름이 같은 지출을 찾는다. 이름만 같은 것이 여럿이면 첫 번째
+    const it=(t.items||[]).find(x=>String(x.date||'')===pdate&&String(x.min||x.name||'')===pname);
+    if(!it){miss+=subs.length;return;}
+    it.sub=subs; n+=subs.length;
+  });
+  save();render();
+  if(n)toast(`영수증 품목 ${n}건을 불러왔습니다`);
+  if(done)done();
 }
 
 // 넘버스·엑셀에서 셀을 복사해 그대로 붙여넣기 (파일 변환 없이)
