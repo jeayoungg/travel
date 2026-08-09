@@ -1155,7 +1155,7 @@
     </div>
   </section>
 
-  <p class="foot-note"><span class="bstamp">v1.0 · 2026.08.09 · v27</span>기기에 자동 저장됩니다 · 기기를 옮길 땐 <b>백업/복원</b><br>
+  <p class="foot-note"><span class="bstamp">v1.0 · 2026.08.09 · v28</span>기기에 자동 저장됩니다 · 기기를 옮길 땐 <b>백업/복원</b><br>
     엑셀로 적어둔 표는 <b>입력 서식</b>을 받아 채운 뒤 <b>복원</b>으로 올리세요</p>
  </div>
 </div>
@@ -2090,7 +2090,9 @@ function renderYearChart(list){
       `<div class="brow">`+
         `<span class="bn">${esc(g.label)}</span>`+
         `<span class="btrack"><span class="yfill" style="width:${pct.toFixed(2)}%">${segs}</span></span>`+
-        `<span class="ba">${won(g.total)}원</span>`+
+        // 묶음마다 몇 번 갔는지 — 금액 아래 곁다리로 (여행별은 늘 1회라 안 적는다)
+        `<span class="ba">${won(g.total)}원`+
+          (mode==='trip'?'':`<span class="bp">${g.trips.length}회</span>`)+`</span>`+
       `</div>`+
       `<div class="ysub">${esc(g.sub)}</div>`+
     `</div>`;
