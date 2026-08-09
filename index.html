@@ -261,6 +261,11 @@
   .yrow{display:block;padding:6px;margin:0 -6px;border-radius:10px;cursor:pointer;
     transition:background .12s}
   .yrow:hover{background:var(--accent-soft)}
+  /* 지금 눌러 둔 줄 — 표시가 없으면 '왜 아래 목록이 줄었지' 를 알 수가 없고
+     다시 눌러 풀 수 있다는 것도 모른다 */
+  .yrow.on{background:var(--accent-soft)}
+  .yrow.on .bn{color:var(--accent)}
+  .yrow.on .bn::after{content:' ✕';font-size:.72rem;opacity:.75}
   /* 좁혀 볼 수 없는 묶음(나라 모름·날짜 없음)은 눌리는 척하지 않는다 */
   .yrow.plain{cursor:default}
   .yrow.plain:hover{background:transparent}
@@ -1129,7 +1134,7 @@
           <th class="l">나라</th><th class="l">여행지</th><th>시작</th><th>종료</th><th>일정</th>
           <th>여행금액</th><th>인원</th><th>항공권</th><th class="l">항공기명</th>
           <th>1박 평균 숙박</th><th>1인 항공권</th><th class="l">잔돈</th>
-          <th title="현지화폐 1단위에 낸 원화 (지출 전체 평균) · 엔·루피아·동은 은행 고시처럼 100단위">평균환율</th><th></th>
+          <th title="그 여행에서 실제로 치른 평균 환율 (지출 전체 평균) · 단위는 고시환율과 같게 — 대부분 1, 엔·동·루피아는 100">평균환율</th><th></th>
         </tr></thead>
         <tbody id="trip-body"></tbody>
         <tfoot id="trip-foot" style="display:none"><tr>
@@ -1150,7 +1155,7 @@
     </div>
   </section>
 
-  <p class="foot-note"><span class="bstamp">v1.0 · 2026.08.09 · v26</span>기기에 자동 저장됩니다 · 기기를 옮길 땐 <b>백업/복원</b><br>
+  <p class="foot-note"><span class="bstamp">v1.0 · 2026.08.09 · v27</span>기기에 자동 저장됩니다 · 기기를 옮길 땐 <b>백업/복원</b><br>
     엑셀로 적어둔 표는 <b>입력 서식</b>을 받아 채운 뒤 <b>복원</b>으로 올리세요</p>
  </div>
 </div>
@@ -1641,26 +1646,24 @@ function fmtRate(v){
   if(n>=1)return n.toLocaleString('ko-KR',{maximumFractionDigits:2});
   return String(Number(n.toPrecision(2)));
 }
-// 환율을 몇 단위로 적는지는 통화마다 다르다 — 은행 고시와 같게 맞춘다.
-// 엔·루피아·동처럼 1단위 값이 잔값인 통화만 100 단위로 적는다 (100엔 = 939.8원).
-// 달러·유로·바트는 1 단위 그대로. 전부 100 을 곱하면 유로가 145,000 이 되어 뜻이 없다.
+// 고시환율은 **나라마다 단위가 다르다.** 대부분 1 단위지만, 1단위 값이 잔값인
+// 엔·동·루피아·킵·리엘·투그릭은 100 단위로 고시한다 (100 JPY = 933.42).
+// 그래서 「1바트 42.72」와 「100엔 933.42」가 둘 다 맞는 표기다.
 const RATE_UNIT={JPY:100,IDR:100,VND:100,LAK:100,KHR:100,MNT:100};
 const rateUnitOf=cur=>RATE_UNIT[String(cur||'').toUpperCase()]||1;
-// 목록의 평균환율 칸 — 은행 고시표와 같은 '통화 · 단위 | 환율' 배치.
+// 목록의 평균환율 칸 — 고시환율과 같은 배치·서식.
+// 단위(`100 JPY`)는 윗줄에 작게, 환율은 아랫줄에. 소수점은 고시처럼 두 자리.
 // 숫자만 100단위로 바꿔 놓고 단위를 안 적으면 무슨 100인지 알 수가 없다.
-// 단위는 통화에 붙여 적는다 (`100 JPY`) — 숫자 100 만 떠 있으면 뜻이 없다.
 function rateCell(t){
   const r=spendRate(t);
-  // 환율이 없는 줄(국내 여행)도 윗줄 자리는 비워 둔다 —
-  // 안 그러면 그 줄만 키가 작아 표가 들쭉날쭉해 보인다
-  // 윗줄(단위)과 아랫줄(값) 두 줄을 다 비워야 키가 같아진다 — 윗줄만 비우면 한 줄이라 7px 낮다
+  // 환율이 없는 줄(국내 여행)도 두 줄 자리를 비워 둔다 —
+  // 한 줄만 두면 그 줄만 키가 작아 표가 들쭉날쭉해 보인다
   if(!r)return `<td class="num"><span class="rq">&nbsp;</span>&nbsp;</td>`;
   const cur=cashOf(t).cur||'', u=rateUnitOf(cur);
-  const txt=(r*u).toLocaleString('ko-KR',{minimumFractionDigits:1,maximumFractionDigits:1});
-  const unit=cur?((u>1?u+' ':'')+cur):'';
-  const tip=`${unit||'현지 1'} = ${txt}원 · 지출 전체 평균`;
-  return `<td class="num" title="${esc(tip)}">`+
-    `<span class="rq">${unit?esc(unit):'&nbsp;'}</span>`+txt+`</td>`;
+  const txt=(r*u).toLocaleString('ko-KR',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const unit=(u>1?u+' ':'')+(cur||'현지');
+  return `<td class="num" title="${esc(unit+' = '+txt+'원 · 지출 전체 평균')}">`+
+    `<span class="rq">${esc(unit)}</span>${txt}</td>`;
 }
 const rateTxt=it=>{const r=rateOf(it);return fmtRate(r);};
 function withDetails(list){
@@ -2000,7 +2003,9 @@ function render(){
   document.getElementById('t-amt').textContent=won(a)+'원';
 
   paintFolds();
-  renderYearChart(filtered);
+  // 그래프에는 **늘 전체**를 넘긴다. 좁혀진 것을 넘기면 한 줄만 남아
+  // 그래프가 고장난 것처럼 보이고, 되돌릴 길도 그 안에서 사라진다.
+  renderYearChart(trips);
 }
 
 // ---- 한눈에 보기 ----
@@ -2015,11 +2020,13 @@ function setYearMode(m){
 }
 // 묶음 만들기 — 보기에 따라 무엇으로 묶을지만 달라진다
 function yearGroups(list,mode){
-  // 해에는 순서(최근 먼저)가 있지만 나라·여행은 없다 — 없으면 많이 쓴 쪽을 위로 올려야 읽힌다
+  // 해와 여행은 **날짜**라는 순서가 있다 — 최근이 위. 아래 목록과 순서를 맞춰야
+  // 같은 것을 두 번 보는 느낌이 든다 (한때 여행별을 금액순으로 했다가 목록과 어긋났다).
+  // 나라만 자연스러운 순서가 없어 많이 쓴 곳을 위로 올린다.
   if(mode==='trip')
-    return list.map(t=>({key:'t'+t.id, label:t.dest||'-', trips:[t],
-      total:amountOf(t), sub:(yearOf(t)==='-'?'날짜 없음':yearOf(t)+'년')+' · '+daysOf(t)+'일'}))
-      .sort((a,b)=>b.total-a.total);
+    return list.map(t=>({key:'t'+t.id, label:t.dest||'-', trips:[t], pick:'',
+      total:amountOf(t),
+      sub:(t.start?fmtD(t.start):'날짜 없음')+' · '+daysOf(t)+'일'}));
   const by=new Map();
   list.forEach(t=>{
     const k=mode==='country'?(countryOf(t)||'나라 모름'):yearOf(t);
@@ -2055,12 +2062,16 @@ function renderYearChart(list){
   const max=Math.max(1,...groups.map(g=>g.total));
   const all=list.reduce((s,t)=>s+amountOf(t),0);
   const filtering=listYear!=='전체'||listDest!=='전체'||listCty!=='전체';
+  // 지금 고른 묶음 — 그 줄에 표시를 남겨야 '눌러 둔 상태' 를 알고 다시 눌러 풀 수 있다
+  const active=mode==='year'?(listYear!=='전체'?listYear:'')
+    :mode==='country'?(listCty!=='전체'&&listCty!=='국내'&&listCty!=='해외'?listCty:'')
+    :'';
   // 맨 위 한 줄에 총액을 먼저 놓는다 — 막대를 읽기 전에 규모를 잡아 준다
   const top=`<div class="ytop"><b>${won(all)}원</b>`+
     `<span>여행 ${list.length}회`+
       (mode==='year'?` · ${groups.length}개 연도`:(mode==='country'?` · ${groups.length}개 나라`:''))+
       ` · ${list.reduce((s,t)=>s+daysOf(t),0)}일</span>`+
-    (filtering?`<button class="yreset" onclick="event.stopPropagation();resetListFilter()">전체 보기</button>`:'')+
+    (filtering?`<button class="yreset" onclick="event.stopPropagation();resetListFilter()">✕ 좁힘 풀기</button>`:'')+
     `</div>`;
   const rows=groups.map(g=>{
     const pct=g.total>0?Math.max(2,g.total/max*100):0;
@@ -2073,8 +2084,9 @@ function renderYearChart(list){
     // 묶음을 누르면 그 해·그 나라만 남긴다. 여행별에서는 그 여행으로 들어간다
     const act=mode==='trip'?`showDetail('${esc(String(g.trips[0].id))}')`
       :g.pick?`filterFromChart('${mode==='country'?'cty':'year'}','${esc(g.pick)}')`:'';
-    return `<div class="yrow${act?'':' plain'}"${act?` onclick="${act}"`:''} `+
-      `title="${esc(g.label)} · ${won(g.total)}원">`+
+    const on=g.pick&&g.pick===active;
+    return `<div class="yrow${act?'':' plain'}${on?' on':''}"${act?` onclick="${act}"`:''} `+
+      `title="${esc(g.label)} · ${won(g.total)}원${on?' · 다시 누르면 좁힘이 풀립니다':''}">`+
       `<div class="brow">`+
         `<span class="bn">${esc(g.label)}</span>`+
         `<span class="btrack"><span class="yfill" style="width:${pct.toFixed(2)}%">${segs}</span></span>`+
