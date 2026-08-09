@@ -3201,17 +3201,23 @@ function paintDenomTotal(){
 }
 // 잔돈 칸 — 지폐를 세지 않고 총액만 적는 길.
 // 치는 동안에는 값을 건드리지 않는다 (건드리면 커서가 튄다).
-function paintChangeInput(){
-  const el=document.getElementById('c-change');
-  if(!el||el===document.activeElement)return;
-  const t=tripById(currentId);
-  el.value=t?(t.change||''):'';
-  // 왜 자동이 아닌지 그 자리에서 알려준다 — 목록에 '자동' 배지가 안 붙는 이유가 여기 있다
+// 왜 자동이 아닌지 그 자리에서 알려준다 — 목록에 '자동' 배지가 안 붙는 이유가 여기 있다.
+// 칸 값과 따로 두는 이유: 치는 중에는 값은 건드리면 안 되지만 안내는 바로 바뀌어야 한다.
+function paintChangeHint(){
   const hint=document.getElementById('c-change-hint');
-  if(hint)hint.textContent=!t?''
+  if(!hint)return;
+  const t=tripById(currentId);
+  hint.textContent=!t?''
     :denomSum(t)?'지폐를 세어 넣어 이 값은 안 씁니다'
     :t.change?'적어 둔 값을 씁니다 (비우면 자동)'
     :'';
+}
+function paintChangeInput(){
+  const el=document.getElementById('c-change');
+  paintChangeHint();
+  if(!el||el===document.activeElement)return;   // 치는 중에는 값을 안 건드린다
+  const t=tripById(currentId);
+  el.value=t?(t.change||''):'';
 }
 // 적은 값은 통화를 붙여 t.change 에 담는다 — 목록의 '잔돈' 칸이 그대로 쓴다
 function setChangeAmt(v){
@@ -3220,6 +3226,7 @@ function setChangeAmt(v){
   t.change=n?(won(n)+(cur==='KRW'?'원':(cur?' '+cur:''))):'';
   saveSoon();
   renderCashCheck();
+  paintChangeHint();          // 치는 즉시 '적어 둔 값을 씁니다 / (비우면 자동)' 이 바뀐다
   const el=document.getElementById('den-tot');
   if(el)el.textContent=won(heldCash(t))+(cur==='KRW'?'원':(cur?' '+cur:''));
 }
