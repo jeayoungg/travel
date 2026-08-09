@@ -190,9 +190,15 @@
   .freeze-col th:first-child,.freeze-col td:first-child{position:sticky;left:0;z-index:1}
   .freeze-col thead th:first-child{z-index:3}
   .freeze-col tfoot td:first-child{z-index:3}
-  #trip-body td.cty,#trip-table thead th:first-child{width:74px;min-width:74px;max-width:74px;
+  #trip-body td.cty,#trip-table thead th:first-child{width:116px;min-width:116px;max-width:116px;
     overflow:hidden;text-overflow:ellipsis;font-size:.76rem;color:var(--muted)}
-  .freeze-col.two{--c1:74px}
+  .freeze-col.two{--c1:116px}
+  /* 나라 앞의 국내/해외 딱지 — 새로 입력받지 않고 '나라' 에서 뽑는다 */
+  .sc{display:inline-block;margin-right:5px;padding:1px 4px;border-radius:4px;
+    font-size:.62rem;font-weight:700;letter-spacing:0;vertical-align:1px}
+  .sc.home{color:var(--muted);background:rgba(118,118,128,.14)}
+  .sc.away{color:var(--accent);background:var(--accent-soft)}
+
   .freeze-col.two th:nth-child(2),.freeze-col.two td:nth-child(2){position:sticky;left:var(--c1);z-index:1;
     box-shadow:.5px 0 0 var(--line)}
   .freeze-col.two thead th:nth-child(2){z-index:3}
@@ -1073,7 +1079,7 @@
     </div>
   </section>
 
-  <p class="foot-note"><span class="bstamp">v1.0 · 2026.08.09 · v20</span>기기에 자동 저장됩니다 · 기기를 옮길 땐 <b>백업/복원</b><br>
+  <p class="foot-note"><span class="bstamp">v1.0 · 2026.08.09 · v21</span>기기에 자동 저장됩니다 · 기기를 옮길 땐 <b>백업/복원</b><br>
     엑셀로 적어둔 표는 <b>입력 서식</b>을 받아 채운 뒤 <b>복원</b>으로 올리세요</p>
  </div>
 </div>
@@ -1546,6 +1552,10 @@ const DETAILS={};
 const CASH={};
 const keyOf=t=>t.dest+'|'+t.start;
 const countryOf=t=>t.country||guessCountry(t.dest)||'';
+// 국내/해외는 새로 묻지 않는다 — 이미 적은 '나라' 에서 뽑는다.
+// 나라를 모르면 '' 를 돌려준다 (모르는 것을 해외라고 단정하지 않는다).
+const HOME=/^(대한민국|한국|국내|korea|south\s*korea|kr)$/i;
+const scopeOf=t=>{const c=String(countryOf(t)).trim();return c?(HOME.test(c)?'국내':'해외'):'';};
 // 현지 금액이 있으면 환율은 반드시 보이게 (없으면 원화/현지 로 계산)
 const rateOf=it=>{
   if(it.rate)return Number(it.rate);
@@ -1799,15 +1809,19 @@ function render(){
   const ctys=[...new Set(trips.map(countryOf).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ko'));
   if(!years.includes(listYear))listYear='전체';
   if(!dests.includes(listDest))listDest='전체';
-  if(!ctys.includes(listCty))listCty='전체';
-  document.getElementById('l-cty').innerHTML=['전체',...ctys].map(c=>
-    `<option value="${esc(c)}"${c===listCty?' selected':''}>${c==='전체'?'모든 나라':esc(c)}</option>`).join('');
+  // 나라 고르개에 '국내·해외' 를 함께 둔다 — 칸을 새로 만들면 줄만 늘어난다
+  const scopes=[...new Set(trips.map(scopeOf).filter(Boolean))];
+  const ctyOpts=['전체',...scopes.sort(),...ctys];
+  if(!ctyOpts.includes(listCty))listCty='전체';
+  document.getElementById('l-cty').innerHTML=ctyOpts.map(c=>
+    `<option value="${esc(c)}"${c===listCty?' selected':''}>`+
+    `${c==='전체'?'모든 나라':(c==='국내'||c==='해외'?esc(c)+' 전체':esc(c))}</option>`).join('');
   const dSel=document.getElementById('l-dest');
   dSel.innerHTML=['전체',...dests].map(d=>
     `<option value="${esc(d)}"${d===listDest?' selected':''}>${d==='전체'?'모든 여행지':esc(d)}</option>`).join('');
   const filtered=trips.filter(t=>
     (listYear==='전체'||yearOf(t)===listYear)&&
-    (listCty==='전체'||countryOf(t)===listCty)&&
+    (listCty==='전체'||(listCty==='국내'||listCty==='해외'?scopeOf(t)===listCty:countryOf(t)===listCty))&&
     (listDest==='전체'||t.dest===listDest));
   const filtering=listYear!=='전체'||listDest!=='전체'||listCty!=='전체';
   document.getElementById('l-reset').style.display=filtering?'block':'none';
@@ -1846,7 +1860,7 @@ function render(){
     tr.onclick=()=>selMode==='trip'?selToggle(t.id):showDetail(t.id);
     if(selMode==='trip'&&selSet.has(String(t.id)))tr.classList.add('selrow');
     tr.innerHTML=
-      `<td class="l cty">${esc(countryOf(t))}</td>`+
+      `<td class="l cty">${(sc=>sc?`<span class="sc ${sc==='국내'?'home':'away'}">${sc}</span>`:'')(scopeOf(t))}${esc(countryOf(t))}</td>`+
       `<td class="l dest">${selMode==='trip'?selCk(t.id):''}${esc(t.dest||'-')}`+
         `${selMode==='trip'?'':' <span class="chev">›</span>'}</td>`+
       `<td class="muted dt">${fmtD(t.start)}</td>`+
