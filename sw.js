@@ -2,7 +2,7 @@
    앱 파일을 통째로 캐시해서 비행기모드·해외 로밍 없이도 열리게 한다.
    지출 데이터 자체는 localStorage 에 있으므로 여기서 다루지 않는다. */
 
-const CACHE = 'travel-expense-app-v31';
+const CACHE = 'travel-expense-app-v32';
 
 const ASSETS = [
   './',
