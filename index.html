@@ -1155,7 +1155,7 @@
     </div>
   </section>
 
-  <p class="foot-note"><span class="bstamp">v1.0 · 2026.08.09 · v28</span>기기에 자동 저장됩니다 · 기기를 옮길 땐 <b>백업/복원</b><br>
+  <p class="foot-note"><span class="bstamp">v1.0 · 2026.08.09 · v29</span>기기에 자동 저장됩니다 · 기기를 옮길 땐 <b>백업/복원</b><br>
     엑셀로 적어둔 표는 <b>입력 서식</b>을 받아 채운 뒤 <b>복원</b>으로 올리세요</p>
  </div>
 </div>
@@ -1655,14 +1655,18 @@ const rateUnitOf=cur=>RATE_UNIT[String(cur||'').toUpperCase()]||1;
 // 단위(`100 JPY`)는 윗줄에 작게, 환율은 아랫줄에. 소수점은 고시처럼 두 자리.
 // 숫자만 100단위로 바꿔 놓고 단위를 안 적으면 무슨 100인지 알 수가 없다.
 function rateCell(t){
-  const r=spendRate(t);
+  // 지출에 현지 금액이 적혀 있으면 그걸로 (실제로 치른 값이라 제일 정확하다).
+  // 옛 여행처럼 원화만 적어 두었으면 **환전 기록의 환율**로 채운다 —
+  // 그 길이 이미 있는데 안 쓰고 빈칸으로 두면, 사람은 넣을 데가 없다고 여긴다.
+  let r=spendRate(t), src='지출 전체 평균';
+  if(!r){r=avgRate(t);src='환전 평균';}
   // 환율이 없는 줄(국내 여행)도 두 줄 자리를 비워 둔다 —
   // 한 줄만 두면 그 줄만 키가 작아 표가 들쭉날쭉해 보인다
   if(!r)return `<td class="num"><span class="rq">&nbsp;</span>&nbsp;</td>`;
   const cur=cashOf(t).cur||'', u=rateUnitOf(cur);
   const txt=(r*u).toLocaleString('ko-KR',{minimumFractionDigits:2,maximumFractionDigits:2});
   const unit=(u>1?u+' ':'')+(cur||'현지');
-  return `<td class="num" title="${esc(unit+' = '+txt+'원 · 지출 전체 평균')}">`+
+  return `<td class="num" title="${esc(unit+' = '+txt+'원 · '+src)}">`+
     `<span class="rq">${esc(unit)}</span>${txt}</td>`;
 }
 const rateTxt=it=>{const r=rateOf(it);return fmtRate(r);};
