@@ -1185,7 +1185,7 @@
     </div>
   </section>
 
-  <p class="foot-note"><span class="bstamp">v1.0 · 2026.08.09 · v36</span>기기에 자동 저장됩니다 · 기기를 옮길 땐 <b>백업/복원</b><br>
+  <p class="foot-note"><span class="bstamp">v1.0 · 2026.08.09 · v37</span>기기에 자동 저장됩니다 · 기기를 옮길 땐 <b>백업/복원</b><br>
     엑셀로 적어둔 표는 <b>입력 서식</b>을 받아 채운 뒤 <b>복원</b>으로 올리세요</p>
  </div>
 </div>
@@ -1440,7 +1440,7 @@
     <div class="sheet-actions">
       <button class="del" onclick="askDelItem(Number(document.getElementById('e-idx').value),true)">삭제</button>
       <button class="ghost" onclick="closeItemForm()">취소</button>
-      <button class="primary grow" onclick="saveItem()">저장</button>
+      <button class="primary grow" ontouchend="event.preventDefault();saveItem()" onclick="saveItem()">저장</button>
     </div>
   </div>
 </div>
@@ -1550,7 +1550,7 @@
     <div class="sheet-actions">
       <button class="del" onclick="askDelEx(Number(document.getElementById('xe-idx').value),true)">삭제</button>
       <button class="ghost" onclick="closeExForm()">취소</button>
-      <button class="primary grow" onclick="saveExForm()">저장</button>
+      <button class="primary grow" ontouchend="event.preventDefault();saveExForm()" onclick="saveExForm()">저장</button>
     </div>
   </div>
 </div>
@@ -1609,7 +1609,7 @@
     <div class="sheet-actions">
       <button class="del" id="del-btn" style="display:none" onclick="removeTrip()">삭제</button>
       <button class="ghost" onclick="closeForm()">취소</button>
-      <button class="primary grow" onclick="saveTrip()">저장</button>
+      <button class="primary grow" ontouchend="event.preventDefault();saveTrip()" onclick="saveTrip()">저장</button>
     </div>
   </div>
 </div>
