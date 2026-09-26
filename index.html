@@ -1185,7 +1185,7 @@
     </div>
   </section>
 
-  <p class="foot-note"><span class="bstamp">v1.0 · 2026.08.09 · v33</span>기기에 자동 저장됩니다 · 기기를 옮길 땐 <b>백업/복원</b><br>
+  <p class="foot-note"><span class="bstamp">v1.0 · 2026.08.09 · v34</span>기기에 자동 저장됩니다 · 기기를 옮길 땐 <b>백업/복원</b><br>
     엑셀로 적어둔 표는 <b>입력 서식</b>을 받아 채운 뒤 <b>복원</b>으로 올리세요</p>
  </div>
 </div>
@@ -1810,6 +1810,7 @@ function load(){
 let trips=load();
 let currentId=null, catFilter='전체', dayFilter='전체', payFilter='전체', searchQ='', viewMode='all';
 // 분류는 대·중·소 세 층위 — 각각 따로 걸 수 있어야 한다
+const DEFAULT_MAJ='여행중';
 let majFilter='전체', midFilter='전체', minFilter='전체';
 const lvOf=(it,k)=>k==='maj'?String(it.maj||'').trim()
   :k==='mid'?String(it.mid||'').trim()
@@ -3116,7 +3117,7 @@ function addItem(){
   const fx=isKrw?null:(useKrw?(r?Math.round(v/r):null):v);
   const c=cat||'기타';
   t.items=t.items||[];
-  t.items.push({maj:'',mid:c,min:name||c,name:name||c,cat:c,
+  t.items.push({maj:DEFAULT_MAJ,mid:c,min:name||c,name:name||c,cat:c,
     amount:krw,date,rate:r?Math.round(r*1e6)/1e6:null,
     fx,fxcur:isKrw?'':local,merchant:'',note:'',pay});
   inp.value='';
@@ -3378,7 +3379,7 @@ function addCashUse(){
   const fx=isKrw?null:(useKrw?(r?Math.round(v/r):null):v);
   const c=cat||'기타';
   t.items=t.items||[];
-  t.items.push({maj:'',mid:c,min:name||c,name:name||c,cat:c,
+  t.items.push({maj:DEFAULT_MAJ,mid:c,min:name||c,name:name||c,cat:c,
     amount:krw,date,rate:r?Math.round(r*1e6)/1e6:null,
     fx,fxcur:isKrw?'':local,merchant:'',note:'',pay:'현금'});
   inp.value='';
@@ -4247,7 +4248,7 @@ function saveGridRows(t,rows){
         let fx=r.fx, krw=r.amount;
         if(isKrw){fx=null;}
         t.items=t.items||[];
-        t.items.push({maj:r.maj||'',mid:r.mid||cat,min:nm,name:nm,cat,
+        t.items.push({maj:r.maj||DEFAULT_MAJ,mid:r.mid||cat,min:nm,name:nm,cat,
           amount:krw,date,rate:r.rate,fx:isKrw?null:(fx||null),fxcur:isKrw?'':local,
           merchant:r.merchant||'',note:r.note||'',
           pay:r.pay||(bulkMode==='use'?'현금':'카드'),
@@ -4730,7 +4731,7 @@ function applyMarket(){
   const rate=(krwSum&&fxSum)?(krwSum/fxSum):(r||null);
   const cat=catOfSub(sub);
   t.items=t.items||[];
-  t.items.push({maj:'',mid:cat,min:shop,name:shop,cat,
+  t.items.push({maj:DEFAULT_MAJ,mid:cat,min:shop,name:shop,cat,
     amount:krwSum,date,rate:rate?Math.round(rate*1e6)/1e6:null,
     fx:isKrw?null:fxSum,fxcur:isKrw?'':local,
     merchant:shop,note:`${sub.length}개 품목`,pay,sub,
@@ -4785,7 +4786,7 @@ function applyBulk(){
       const rawCat=String(get(row,'cat')||'').trim();
       const cat=catFrom(rawCat,nm,merchant,String(get(row,'note')||''))||'기타';
       t.items=t.items||[];
-      t.items.push({maj:'',mid:rawCat||cat,min:nm,name:nm,cat,amount:krw||0,date,
+      t.items.push({maj:DEFAULT_MAJ,mid:rawCat||cat,min:nm,name:nm,cat,amount:krw||0,date,
         rate:rate?Math.round(rate*1e6)/1e6:null,fx:isKrw?null:(fx||null),fxcur:isKrw?'':local,
         merchant,note:String(get(row,'note')||'').trim(),pay,
         fee:cellNum(get(row,'fee'))||0, cashback:cellNum(get(row,'cashback'))||0});
@@ -5981,7 +5982,7 @@ function importItemTable(rows,fname,done){
     const fileRate=Number(String(get(row,'rate')).replace(/[^\d.]/g,''))||null;
     const rate=(krw&&fx)?Math.round(krw/fx*1e6)/1e6:fileRate;
     const it={
-      maj:get(row,'maj')||'', mid:get(row,'mid')||cat, min:nm, name:nm, cat,
+      maj:get(row,'maj')||DEFAULT_MAJ, mid:get(row,'mid')||cat, min:nm, name:nm, cat,
       // 원화가 비어 있으면 환율 × 현지화폐 로 채운다
       amount:krw||(rate&&fx?Math.round(fx*rate):0),
       date:cellDate(get(row,'date')),
