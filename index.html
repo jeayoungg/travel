@@ -1353,7 +1353,7 @@
       </div>
       <div class="additem top" id="x-add" hidden>
         <input class="i-date" id="x-date" type="date">
-        <input class="i-amt" id="x-fx" type="text" inputmode="numeric" placeholder="받은 현지 금액">
+        <input class="i-amt" id="x-fx" type="text" inputmode="decimal" data-dec placeholder="받은 현지 금액">
         <input class="i-amt" id="x-krw" type="text" inputmode="numeric" placeholder="낸 원화">
         <!-- 환율은 둘을 다 적으면 저절로 나오지만, 하나만 알 때는 직접 적을 수 있어야 한다.
              소수를 쳐야 하므로 inputmode 는 decimal — numeric 이면 쉼표가 끼어든다 -->
@@ -1436,7 +1436,7 @@
     </div>
     <div class="grid2">
       <div class="field"><label>환율</label><input id="e-rate" type="text" inputmode="decimal" placeholder="자동" oninput="this.dataset.auto='';itemCalc()"></div>
-      <div class="field"><label id="e-fx-lab">현지통화</label><input id="e-fx" type="text" inputmode="numeric" placeholder="선택" oninput="this.dataset.auto='';itemCalc()"></div>
+      <div class="field"><label id="e-fx-lab">현지통화</label><input id="e-fx" type="text" inputmode="decimal" data-dec placeholder="선택" oninput="this.dataset.auto='';itemCalc()"></div>
     </div>
     <div class="grid2">
       <div class="field"><label>상호 명</label><input id="e-merchant" placeholder="선택" autocomplete="off"></div>
@@ -1552,7 +1552,7 @@
     <input type="hidden" id="xe-idx">
     <div class="grid2">
       <div class="field"><label>날짜</label><input id="xe-date" type="date"></div>
-      <div class="field"><label id="xe-fx-lab">받은 현지 금액</label><input id="xe-fx" type="text" inputmode="numeric" oninput="hintExForm()"></div>
+      <div class="field"><label id="xe-fx-lab">받은 현지 금액</label><input id="xe-fx" type="text" inputmode="decimal" data-dec oninput="hintExForm()"></div>
     </div>
     <div class="grid2">
       <div class="field"><label>낸 원화 (KRW)</label><input id="xe-krw" type="text" inputmode="numeric" oninput="hintExForm()"></div>
@@ -1646,27 +1646,40 @@ const shortWon=n=>{
                          :won(Math.round(m)))+'만';
 };
 const numify=s=>{const v=String(s??'').replace(/[^\d.-]/g,'');return v===''?null:Math.round(Number(v))};
+// 현지 금액은 12.50 달러처럼 소수가 있다 — 둘째 자리까지 지킨다 (원화는 numify 로 정수)
+const fx2=n=>Math.round(n*100)/100;
+const numifyFx=s=>{const v=String(s??'').replace(/[^\d.-]/g,'');if(v==='')return null;const n=Number(v);return isFinite(n)?fx2(n):null;};
 // 금액 칸은 치는 동안 세 자리마다 쉼표를 넣는다 — 0 을 몇 개 쳤는지 세지 않아도 되게.
 // 읽을 땐 numify() 가 쉼표를 떼므로 저장 값에는 영향이 없다.
 function commafy(el){
   const before=el.value;
   const pos=(el.selectionStart==null)?before.length:el.selectionStart;
-  const digitsBefore=before.slice(0,pos).replace(/\D/g,'').length;
+  // 현지 금액 칸(data-dec)은 소수점과 소수 둘째 자리까지 남긴다
+  const dec=el.dataset.dec!=null, keep=dec?/[\d.]/:/\d/;
+  const digitsBefore=[...before.slice(0,pos)].filter(ch=>keep.test(ch)).length;
   const neg=before.trim().startsWith('-');
-  const d=before.replace(/\D/g,'');
-  const out=d?((neg?'-':'')+Number(d).toLocaleString('ko-KR')):(neg?'-':'');
+  let out;
+  if(dec){
+    const raw=before.replace(/[^\d.]/g,''), dot=raw.indexOf('.');
+    const ip=(dot<0?raw:raw.slice(0,dot)).replace(/^0+(?=\d)/,'');
+    const fp=dot<0?null:raw.slice(dot+1).replace(/\./g,'').slice(0,2);
+    out=(neg?'-':'')+(ip?Number(ip).toLocaleString('ko-KR'):'')+(fp!=null?'.'+fp:'');
+  }else{
+    const d=before.replace(/\D/g,'');
+    out=d?((neg?'-':'')+Number(d).toLocaleString('ko-KR')):(neg?'-':'');
+  }
   if(out===before)return;
   el.value=out;
   if(digitsBefore===0){try{el.setSelectionRange(out.length,out.length);}catch(e){}return;}
   let seen=0,i=0;
-  for(;i<out.length;i++){if(/\d/.test(out[i]))seen++;if(seen>=digitsBefore)break;}
+  for(;i<out.length;i++){if(keep.test(out[i]))seen++;if(seen>=digitsBefore)break;}
   const caret=Math.min(out.length,i+1);
   try{el.setSelectionRange(caret,caret);}catch(e){}
 }
 // 값을 읽는 쪽(oninput)이 돌기 전에 먼저 모양을 잡아야 해서 캡처 단계에 건다
 document.addEventListener('input',e=>{
   const el=e.target;
-  if(el&&el.tagName==='INPUT'&&el.getAttribute('inputmode')==='numeric')commafy(el);
+  if(el&&el.tagName==='INPUT'&&(el.getAttribute('inputmode')==='numeric'||el.dataset.dec!=null))commafy(el);
 },true);
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const fmtD=s=>s?String(s).replace(/-/g,'.'):'';
@@ -3185,7 +3198,7 @@ function addItem(){
   const r=rateFor(t,pay), v=Number(amtStr), useKrw=isKrw||row.krw||lineCur.i==='krw';
   if(!isKrw&&!useKrw&&!r){toast("환율 정보가 없습니다 — 옆 버튼으로 원 단위로 바꾸거나 환전 기록을 먼저 넣으세요");return;}
   const krw=useKrw?v:Math.round(v*r);
-  const fx=isKrw?null:(useKrw?(r?Math.round(v/r):null):v);
+  const fx=isKrw?null:(useKrw?(r?fx2(v/r):null):v);
   const c=cat||'기타';
   t.items=t.items||[];
   t.items.push({maj:DEFAULT_MAJ,mid:c,min:name||c,name:name||c,cat:c,
@@ -3399,7 +3412,7 @@ function hintItem(){
   const r=rateFor(t,pay), lab=rateLabel(t,pay);
   const v=Number(amtStr), useKrw=isKrw||row.krw||lineCur.i==='krw';
   const krw=useKrw?v:(r?Math.round(v*r):0);
-  const fx=useKrw?(r?Math.round(v/r):0):v;
+  const fx=useKrw?(r?fx2(v/r):0):v;
   el.innerHTML='✅ '+[
     date?fmtD(date):'<span style="color:var(--danger)">날짜 없음</span>',
     esc(name||'항목 없음'), esc(cat||'기타'), esc(pay),
@@ -3429,7 +3442,7 @@ function hintCash(){
   const [date,name,cat,amtStr]=row;
   const v=Number(amtStr), useKrw=isKrw||row.krw||lineCur.u==='krw';
   const krw=useKrw?v:(r?Math.round(v*r):0);
-  const fx=useKrw?(r?Math.round(v/r):0):v;
+  const fx=useKrw?(r?fx2(v/r):0):v;
   el.innerHTML='✅ '+[
     date?fmtD(date):'<span style="color:var(--danger)">날짜 없음</span>',
     esc(name||'항목 없음'), esc(cat||'기타'),
@@ -3447,7 +3460,7 @@ function addCashUse(){
   const v=Number(amtStr), useKrw=isKrw||row.krw||lineCur.u==='krw';
   if(!useKrw&&!r){toast('먼저 환전 기록을 추가하세요 (환율 계산에 필요합니다)');return;}
   const krw=useKrw?v:Math.round(v*r);
-  const fx=isKrw?null:(useKrw?(r?Math.round(v/r):null):v);
+  const fx=isKrw?null:(useKrw?(r?fx2(v/r):null):v);
   const c=cat||'기타';
   t.items=t.items||[];
   t.items.push({maj:DEFAULT_MAJ,mid:c,min:name||c,name:name||c,cat:c,
@@ -3487,11 +3500,11 @@ function addCarryIn(){
         `<b>${won(amt)} ${esc(cur)}</b></span>`
       :`<span class="muted">같은 통화(${esc(cur||'?')})를 쓴 지난 여행을 찾지 못했습니다. 직접 적어 주세요.</span>`)+
     `<div class="field full"><label>현지 금액</label>`+
-    `<input id="ci-fx" inputmode="numeric" value="${amt?won(amt):''}"></div>`+
+    `<input id="ci-fx" inputmode="decimal" data-dec value="${amt?won(amt):''}"></div>`+
     `<div class="field full"><label>원화 (그때 환율로)</label>`+
     `<input id="ci-krw" inputmode="numeric" value="${krw?won(krw):''}"></div>`,
     '넣기',()=>{
-      const fx=numify(document.getElementById('ci-fx').value)||0;
+      const fx=numifyFx(document.getElementById('ci-fx').value)||0;
       const kw=numify(document.getElementById('ci-krw').value)||0;
       if(!fx){toast('현지 금액을 적어 주세요');return;}
       cashOf(t).ex.push({date:t.start||'',fx,krw:kw,rate:(fx&&kw)?kw/fx:null,
@@ -3507,16 +3520,16 @@ function addCarryIn(){
 function addEx(){
   const t=tripById(currentId);if(!t)return;
   const el=id=>document.getElementById(id);
-  let fx=numify(el('x-fx').value);
+  let fx=numifyFx(el('x-fx').value);
   let krw=numify(el('x-krw').value);
   // 환율은 0.0854 처럼 소수라 numify(반올림)를 쓰면 안 된다
   const rateIn=(v=>{const n=Number(String(v).replace(/[^\d.]/g,''));return n>0?n:null;})(el('x-rate').value);
   if(!fx&&!krw){el('x-fx').focus();return;}
   // 원화는 소수점이 없으므로 반올림해 정수로 담는다.
-  // 현지 금액 칸도 숫자만 받으므로(쉼표 자동) 정수다. 환율만 소수를 그대로 지킨다.
+  // 현지 금액은 소수 둘째 자리까지, 환율은 소수를 그대로 지킨다.
   if(rateIn){
     if(fx&&!krw)krw=Math.round(fx*rateIn);
-    else if(krw&&!fx)fx=Math.round(krw/rateIn);
+    else if(krw&&!fx)fx=fx2(krw/rateIn);
   }
   const rate=rateIn||((fx&&krw)?krw/fx:null);
   cashOf(t).ex.push({date:el('x-date').value,fx:fx||0,krw:krw||0,rate,
@@ -3538,7 +3551,7 @@ function openExForm(i){
 }
 function closeExForm(){document.getElementById('ex-backdrop').classList.remove('on');}
 function hintExForm(){
-  const fx=numify(document.getElementById('xe-fx').value)||0;
+  const fx=numifyFx(document.getElementById('xe-fx').value)||0;
   const krw=numify(document.getElementById('xe-krw').value)||0;
   document.getElementById('xe-rate').innerHTML=(fx&&krw)
     ? `환율 <b>${fmtRate(krw/fx)}</b> (1 현지 = ${fmtRate(krw/fx)}원)`
@@ -3548,7 +3561,7 @@ function saveExForm(){
   const t=tripById(currentId);if(!t)return;
   const i=Number(document.getElementById('xe-idx').value);
   const c=cashOf(t);if(!c.ex[i])return;
-  const fx=numify(document.getElementById('xe-fx').value)||0;
+  const fx=numifyFx(document.getElementById('xe-fx').value)||0;
   const krw=numify(document.getElementById('xe-krw').value)||0;
   if(!fx&&!krw){toast('금액을 입력하세요');return;}
   c.ex[i]={date:document.getElementById('xe-date').value,fx,krw,
@@ -4203,7 +4216,7 @@ function gridPaste(e,el){
 function gridRowData(tr){
   const o={};
   tr.querySelectorAll('.gcell').forEach(el=>o[el.dataset.f]=el.value.trim());
-  let krw=cellNum(o.krw), fx=cellNum(o.fx);
+  let krw=cellNum(o.krw), fx=cellFx(o.fx);
   let rate=Number(String(o.rate).replace(/[^\d.]/g,''))||null;
   // 현금 입력에는 원화·환율 칸이 없다 — 환전 평균환율로 여기서 채운다
   if(bulkMode==='use'&&!krw&&fx){
@@ -4237,7 +4250,7 @@ function autoRates(){
   [...document.getElementById('gbody').rows].forEach(tr=>{
     const c={};tr.querySelectorAll('.gcell').forEach(el=>c[el.dataset.f]=el);
     if(!c.rate||!c.krw||!c.fx)return;   // 현금 입력엔 원화·환율 칸이 없다 — 저장할 때 계산한다
-    const fx=cellNum(c.fx.value), krw=cellNum(c.krw.value);
+    const fx=cellFx(c.fx.value), krw=cellNum(c.krw.value);
     // 현금 입력에는 결제유형 칸이 없다 — 그때는 '현금' 으로 본다
     const pay=c.pay?String(c.pay.value||'').trim():(bulkMode==='use'?'현금':'');
     // 현금 줄의 환율은 환전 기록에서 나오는 값이다 — 직접 적는 칸이 아니다
@@ -4433,7 +4446,8 @@ function asPay(tk){
 }
 const asNum=tk=>{
   const c=tk.replace(/[,₩]/g,'').replace(/(원|krw|idr|jpy|vnd|thb|twd|usd|rp)$/i,'');
-  return /^\d+$/.test(c)?Number(c):null;
+  // 12.5 처럼 소수가 붙은 현지 금액도 받는다 (날짜 토큰은 이미 먼저 걸러졌다)
+  return /^\d+(\.\d{1,2})?$/.test(c)?Number(c):null;
 };
 function dateCtx(t){
   const sy=t&&t.start?Number(String(t.start).slice(0,4)):new Date().getFullYear();
@@ -4465,7 +4479,8 @@ function parseFreeLines(text,ctx){
     toks.forEach((tk,i)=>{
       if(used.has(i))return;
       const n=asNum(tk);
-      if(n==null||n<10)return;
+      // 한 자리 수는 금액이 아닐 때가 많아 건너뛴다 — 단, 3.5 처럼 소수가 있으면 금액이다
+      if(n==null||(n<10&&Number.isInteger(n)))return;
       if(amt==null||String(n).length>String(amt).length){amt=n;ai=i;}
     });
     if(amt==null)continue;
@@ -4756,6 +4771,7 @@ function renderBulk(){
   document.getElementById('bulk-ok').disabled=!ok;
 }
 const cellNum=v=>{const n=Number(String(v||'').replace(/[^\d.-]/g,''));return isFinite(n)?Math.round(n):0;};
+const cellFx=v=>{const n=Number(String(v||'').replace(/[^\d.-]/g,''));return isFinite(n)?fx2(n):0;};
 const cellDate=v=>{
   const s=String(v||'').trim();
   if(/^\d{4}-\d{2}-\d{2}$/.test(s))return s;
@@ -4773,13 +4789,13 @@ function applyMarket(){
   const r=rateFor(t,pay);
   const sub=[];
   bulkRows.forEach(row=>{
-    let fx=cellNum(get(row,'fx')), krw=cellNum(get(row,'krw'));
+    let fx=cellFx(get(row,'fx')), krw=cellNum(get(row,'krw'));
     if(!fx&&!krw)return;
     if(isKrw){ if(!krw)krw=fx; fx=0; }
     else if(!krw&&fx&&r)krw=Math.round(fx*r);
-    else if(!fx&&krw&&r)fx=Math.round(krw/r);
+    else if(!fx&&krw&&r)fx=fx2(krw/r);
     sub.push({name:String(get(row,'name')||'').trim()||'품목',
-      qty:cellNum(get(row,'qty'))||1, unit:cellNum(get(row,'unit'))||0,
+      qty:cellNum(get(row,'qty'))||1, unit:cellFx(get(row,'unit'))||0,
       fx:fx||0, krw:krw||0, cat:String(get(row,'cat')||'').trim()});
   });
   if(!sub.length){
@@ -4829,14 +4845,14 @@ function applyBulk(){
   const get=(row,f)=>{const i=Object.keys(bulkMap).find(k=>bulkMap[k]===f);return i==null?'':row[i];};
   let n=0;
   bulkRows.forEach(row=>{
-    let fx=cellNum(get(row,'fx')), krw=cellNum(get(row,'krw'));
+    let fx=cellFx(get(row,'fx')), krw=cellNum(get(row,'krw'));
     if(!fx&&!krw)return;
     const date=cellDate(get(row,'date'));
     if(bulkMode==='market'){ return; }   // 아래에서 따로 처리
     if(bulkMode==='ex'){
       if(!fx||!krw){                                   // 한쪽만 있으면 환율로 보완
         const r=avgRate(t);
-        if(r){ if(!fx)fx=Math.round(krw/r); else krw=Math.round(fx*r); }
+        if(r){ if(!fx)fx=fx2(krw/r); else krw=Math.round(fx*r); }
       }
       if(!fx||!krw)return;
       c.ex.push({date,fx,krw,rate:krw/fx,memo:String(get(row,'memo')||'').trim()});
@@ -4847,7 +4863,7 @@ function applyBulk(){
       const r=rateFor(t,pay);
       if(isKrw){ if(!krw)krw=fx; fx=0; }
       else if(!krw&&fx&&r)krw=Math.round(fx*r);
-      else if(!fx&&krw&&r)fx=Math.round(krw/r);
+      else if(!fx&&krw&&r)fx=fx2(krw/r);
       if(!krw&&!fx)return;
       // 환율은 짐작하지 않는다 — 원화·현지금액이 둘 다 있으면 그 둘이 곧 환율이다.
       // (카드는 실제 빠져나간 원화가 기준, 현금은 한쪽만 있을 때 환전 평균환율로 채운다)
@@ -4980,7 +4996,7 @@ function itemCalc(){
     if(!A||!R||!F||!OUT)return;
     const isKrw=t?cashOf(t).cur==='KRW':true;
     const rateVal=Number(String(R.value).replace(/[^\d.]/g,''))||0;
-    const krw=numify(A.value)||0, fx=numify(F.value)||0, fee=numify(FE.value)||0;
+    const krw=numify(A.value)||0, fx=numifyFx(F.value)||0, fee=numify(FE.value)||0;
     const isCash=String((P&&P.value)||'').includes('현금');
     const cardRow=document.getElementById('e-card-row');
     if(cardRow)cardRow.style.display=isCash?'none':'';
@@ -5040,7 +5056,7 @@ function saveItem(){
     amount:numify(document.getElementById('e-amt').value)||0,
     date:document.getElementById('e-date').value,
     rate:rateRaw?Number(rateRaw):null,
-    fx:numify(document.getElementById('e-fx').value),
+    fx:numifyFx(document.getElementById('e-fx').value),
     fxcur:t.items[i].fxcur||'',
     merchant:document.getElementById('e-merchant').value.trim(),
     note:document.getElementById('e-note').value.trim(),
@@ -5776,7 +5792,7 @@ function importExTable(rows,label,done){
   const byDest=new Map(), startOf=new Map();
   rows.slice(1).forEach(row=>{
     const name=get(row,'dest');
-    const krw=cellNum(get(row,'krw')), fx=cellNum(get(row,'fx'));
+    const krw=cellNum(get(row,'krw')), fx=cellFx(get(row,'fx'));
     if(!name||(!krw&&!fx))return;
     // 이름이 같아도 여행 시작일이 다르면 다른 여행이다
     const st=cellDate(get(row,'start'));
@@ -5836,8 +5852,8 @@ function importSubTable(rows,label,done){
     if(!byItem.has(k))byItem.set(k,{dest,st,pdate,pname,subs:[]});
     byItem.get(k).subs.push({name,
       qty:cellNum(get(row,'qty'))||1,
-      unit:cellNum(get(row,'unit'))||null,
-      fx:cellNum(get(row,'fx'))||null,
+      unit:cellFx(get(row,'unit'))||null,
+      fx:cellFx(get(row,'fx'))||null,
       krw:cellNum(get(row,'krw'))||0,
       cat:get(row,'cat')||''});
   });
@@ -6041,7 +6057,7 @@ function importItemTable(rows,fname,done){
     // 손으로 적은 여행 환율 ('여행환율' 열) — 줄마다 같은 값이 반복되므로 처음 것만 쓴다
     put('rate',(v=>{const n=Number(String(v).replace(/[^\d.]/g,''));return isFinite(n)&&n>0?n:'';})(get(row,'trate')));
     info.set(dest,m);
-    const krw=cellNum(get(row,'krw')), fx=cellNum(get(row,'fx'));
+    const krw=cellNum(get(row,'krw')), fx=cellFx(get(row,'fx'));
     if(!krw&&!fx){skipped++;return;}
     const merchant=get(row,'merchant');
     // 분류는 '분류' 열이 없으면 중분류·대분류·이름에서 알아낸다
