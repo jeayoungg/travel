@@ -346,7 +346,8 @@
   .addbar .iconbtn{color:var(--accent);border:.5px solid var(--line);background:var(--card)}
   .iconbtn:hover,.addbar .iconbtn:hover{background:var(--accent-soft);border-color:var(--accent);
     color:var(--accent)}
-  .iconbtn[aria-expanded="true"],.addbar .iconbtn[aria-expanded="true"]{background:var(--accent);
+  .iconbtn[aria-expanded="true"],.addbar .iconbtn[aria-expanded="true"],
+  .addbar .iconbtn[aria-pressed="true"]{background:var(--accent);
     border-color:var(--accent);color:#fff}
   .listfilter select{font-family:inherit;font-size:.84rem;font-weight:600;padding:9px 11px;
     border:.5px solid var(--line);border-radius:var(--r-sm);background:var(--card);color:var(--ink);
@@ -737,6 +738,13 @@
     padding:9px 13px;cursor:pointer;border:.5px solid var(--line);background:var(--card);color:var(--accent)}
   .selbar button.danger{background:var(--del,#FF3B30);border-color:transparent;color:#fff}
   .selbar button:disabled{opacity:.4;cursor:default}
+  /* 순서 바꾸기 — 이름 칸 앞에 ▲▼. 칸을 새로 넣지 않는 건 고르기와 같은 이유 */
+  .ordbtns{display:inline-flex;gap:3px;margin-right:7px;vertical-align:middle}
+  .ordbtns button{width:26px;height:24px;padding:0;border-radius:7px;cursor:pointer;
+    border:.5px solid var(--line);background:var(--card);color:var(--accent);
+    font-size:.7rem;line-height:1;font-family:inherit}
+  .ordbtns button:disabled{opacity:.3;cursor:default}
+  #detail-table tr.ordmoved td{background:var(--accent-soft)}
   /* 고르는 동안에는 표를 눌러도 창이 열리지 않는다 — 줄 전체가 선택 단추가 된다 */
   .selecting tbody tr{cursor:pointer}
   /* 고를 때는 ✏️ 열을 감춘다. 어차피 그때는 못 누르고, 동그라미가 들어와
@@ -1222,6 +1230,8 @@
       <span>지출 내역 <small id="d-filtered"></small></span>
       <span class="addbar">
         <button class="secbtn iconbtn" onclick="selStart('item')" title="여러 개 골라 지우기" aria-label="고르기"><svg viewBox="0 0 16 16" width="17" height="17" aria-hidden="true"><rect x="2" y="2.6" width="10.8" height="10.8" rx="2.6" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M5 8.2l2.1 2.1L11 6.4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+        <button class="secbtn iconbtn" id="ord-h" onclick="ordToggle()" aria-pressed="false"
+                title="순서 바꾸기" aria-label="순서 바꾸기"><svg viewBox="0 0 16 16" width="17" height="17" aria-hidden="true"><path d="M5 13V3M2.6 5.4L5 3l2.4 2.4M11 3v10M8.6 10.6L11 13l2.4-2.4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
         <button class="secbtn iconbtn" onclick="openColPicker('detail-table')"
                 title="보일 열 고르기" aria-label="보일 열 고르기"><svg viewBox="0 0 16 16" width="17" height="17" aria-hidden="true"><rect x="2" y="3" width="3.4" height="10" rx="1" fill="currentColor" opacity=".9"/><rect x="6.3" y="3" width="3.4" height="10" rx="1" fill="currentColor" opacity=".55"/><rect x="10.6" y="3" width="3.4" height="10" rx="1" fill="currentColor" opacity=".3"/></svg></button>
         <button class="secbtn iconbtn" id="df-h" onclick="toggleDetailFilter()" aria-expanded="false" aria-controls="d-fold"
@@ -1574,6 +1584,11 @@
   <button id="sel-all" onclick="selAllToggle()">전체 선택</button>
   <button onclick="selEnd()">취소</button>
   <button class="danger" id="sel-del" onclick="askSelDelete()" disabled>삭제</button>
+</div>
+
+<div class="selbar" id="ordbar" hidden>
+  <span class="selnum">▲▼ 로 순서를 바꾸세요</span>
+  <button onclick="ordToggle(false)">완료</button>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -2170,6 +2185,8 @@ function showView(id){
   // (예전에 showList() 가 view-cash 를 안 꺼서 두 화면이 겹쳐 보인 적이 있다)
   const gs=document.getElementById('gridscreen');
   if(gs&&gs.classList.contains('on'))closeGridScreen();
+  // 순서 바꾸기 바는 화면 밖에 떠 있어서, 지출 내역을 떠나면 모드를 끈다
+  if(id!=='view-detail'&&ordMode)ordToggle(false);
   scrollTo(0,0);
   // 안 보이는 표는 폭을 잴 수 없어 '상자에 맞춰 늘리기' 가 건너뛰어진다.
   // 보이게 된 직후 한 번 더 맞춘다 — 안 하면 표가 좁게 그려졌다 뒤늦게 튄다.
@@ -2188,6 +2205,7 @@ function showDetail(id){
     majFilter='전체';midFilter='전체';minFilter='전체';
     const se=document.getElementById('d-search');if(se)se.value='';
     const ce=document.getElementById('d-clear');if(ce)ce.style.display='none';}
+  if(!sameId(currentId,id))ordMode=false;
   currentId=id;
   showView('view-detail');
   renderDetail();window.scrollTo(0,0);
@@ -2424,10 +2442,11 @@ function renderDetail(){
     const it=o.it;
     const hasSub=it.sub&&it.sub.length;
     return `<tr${selMode==='item'?` data-selkey="${o.i}" class="${selSet.has(String(o.i))?'selrow':''}" onclick="selToggle('${o.i}')"`
+        :ordMode?` data-ordkey="${o.i}"${o.i===ordMoved?' class="ordmoved"':''}`
         :` onclick="${hasSub?`showMarket(${o.i},'detail')`:`openItemForm(${o.i})`}"`}>`+
       `<td class="l">${esc(it.maj||it.cat||'')}</td>`+
       `<td class="l">${esc(it.mid||'')}</td>`+
-      `<td class="l nm">${selCk(o.i)}<b>${mark(it.min||it.name||'',q)}</b>${(it.sub&&it.sub.length)?`<span class="mkbadge">${it.sub.length}품목</span>`:''}</td>`+
+      `<td class="l nm">${selCk(o.i)}${ordMode?`<span class="ordbtns"><button onclick="ordMove(${o.i},-1)" aria-label="위로">▲</button><button onclick="ordMove(${o.i},1)" aria-label="아래로">▼</button></span>`:''}<b>${mark(it.min||it.name||'',q)}</b>${(it.sub&&it.sub.length)?`<span class="mkbadge">${it.sub.length}품목</span>`:''}</td>`+
       `<td class="muted dt">${fmtD(it.date)}</td>`+
       `<td class="num">${won(it.amount)}</td>`+
       `<td class="muted num">${rateTxt(it)}</td>`+
@@ -2480,6 +2499,7 @@ function renderDetail(){
       }).join('');
     }
     body.innerHTML=html;
+    if(ordMode)ordPaintEdges();
     // 수수료·캐시백이 이 여행에 하나도 없으면 두 열은 자리만 먹는다 — 통째로 숨긴다
     const feeSum=shown.reduce((a,o)=>a+(o.it.fee||0),0);
     const cbSum=shown.reduce((a,o)=>a+(o.it.cashback||0),0);
@@ -2915,6 +2935,49 @@ function toggleListFilter(){
   if(h)h.setAttribute('aria-expanded',open);
 }
 
+// ================= 지출 순서 바꾸기 =================
+// 목록은 저장된 배열 순서 그대로 보인다. ▲▼ 는 지금 화면에서 바로 위·아래 줄과 자리를 바꾼다.
+// 날짜별·분류별로 묶여 있으면 같은 묶음 안에서만 움직이고,
+// 좁혀 보는 중이면 안 보이는 줄은 건너뛴다 (보이는 순서대로 움직여야 헷갈리지 않는다).
+let ordMode=false, ordMoved=-1;
+function ordToggle(on){
+  const next=(on===undefined)?!ordMode:!!on;
+  if(next&&!currentId)return;
+  if(next&&selMode)selEnd();
+  ordMode=next;ordMoved=-1;
+  const h=document.getElementById('ord-h');if(h)h.setAttribute('aria-pressed',ordMode);
+  const bar=document.getElementById('ordbar');if(bar)bar.hidden=!ordMode;
+  renderDetail();
+}
+// 같은 묶음 안의 바로 옆 줄 — 묶음 머리(tr.grp)를 만나면 거기서 끝
+function ordNeighbor(tr,dir){
+  const n=dir<0?tr.previousElementSibling:tr.nextElementSibling;
+  return n&&n.dataset.ordkey!=null?n:null;
+}
+function ordPaintEdges(){
+  document.querySelectorAll('#d-body tr[data-ordkey]').forEach(tr=>{
+    const b=tr.querySelectorAll('.ordbtns button');
+    if(b[0])b[0].disabled=!ordNeighbor(tr,-1);
+    if(b[1])b[1].disabled=!ordNeighbor(tr,1);
+  });
+}
+function ordMove(i,dir){
+  if(event)event.stopPropagation();
+  const t=tripById(currentId);if(!t)return;
+  const tr=document.querySelector(`#d-body tr[data-ordkey="${i}"]`);
+  const nb=tr&&ordNeighbor(tr,dir);if(!nb)return;
+  // 묶음 안에서도 배열 순서는 그대로라, 위 줄은 늘 앞 번호·아래 줄은 늘 뒷 번호다.
+  // 빼낸 뒤 이웃 번호 자리에 넣으면 위로는 이웃 앞, 아래로는 이웃 뒤에 들어간다
+  const j=Number(nb.dataset.ordkey);
+  const it=t.items.splice(i,1)[0];
+  t.items.splice(j,0,it);
+  ordMoved=j;
+  save();renderDetail();
+  const moved=document.querySelector(`#d-body tr[data-ordkey="${j}"]`);
+  if(moved){const r=moved.getBoundingClientRect();
+    if(r.top<60||r.bottom>innerHeight-80)moved.scrollIntoView({block:'center'});}
+}
+
 // ================= 고르기(선택 삭제) =================
 // 여행 목록 · 지출 내역 · 환전 기록에서 여러 개를 골라 한 번에 지운다.
 // 표에 칸을 새로 넣지 않는다 — 열 번호(nth-child)에 기대는 코드가 많아서다.
@@ -2935,6 +2998,7 @@ function selKeys(){
 }
 function selStart(kind){
   if(kind==='item'&&!currentId)return;
+  if(ordMode)ordToggle(false);
   selMode=kind;selSet.clear();
   refreshViews();selPaint();
 }
