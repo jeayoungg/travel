@@ -1224,8 +1224,8 @@
         <button class="secbtn iconbtn" onclick="selStart('item')" title="여러 개 골라 지우기" aria-label="고르기"><svg viewBox="0 0 16 16" width="17" height="17" aria-hidden="true"><rect x="2" y="2.6" width="10.8" height="10.8" rx="2.6" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M5 8.2l2.1 2.1L11 6.4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
         <button class="secbtn iconbtn" onclick="openColPicker('detail-table')"
                 title="보일 열 고르기" aria-label="보일 열 고르기"><svg viewBox="0 0 16 16" width="17" height="17" aria-hidden="true"><rect x="2" y="3" width="3.4" height="10" rx="1" fill="currentColor" opacity=".9"/><rect x="6.3" y="3" width="3.4" height="10" rx="1" fill="currentColor" opacity=".55"/><rect x="10.6" y="3" width="3.4" height="10" rx="1" fill="currentColor" opacity=".3"/></svg></button>
-        <button class="secbtn iconbtn" id="df-h" onclick="toggleDetailFilter()" aria-expanded="false"
-                title="좁혀 보기 — 분류·검색" aria-label="좁혀 보기"><svg viewBox="0 0 16 16" width="17" height="17" aria-hidden="true"><path d="M2 4h12M4 8h8M6.5 12h3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button>
+        <button class="secbtn iconbtn" id="df-h" onclick="toggleDetailFilter()" aria-expanded="false" aria-controls="d-fold"
+                title="좁혀 보기 — 보기 방식·분류·검색" aria-label="좁혀 보기"><svg viewBox="0 0 16 16" width="17" height="17" aria-hidden="true"><path d="M2 4h12M4 8h8M6.5 12h3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button>
         <button class="addtoggle" id="i-toggle" onclick="toggleAdd()"
                 title="한 줄씩 적어 넣기"><b>＋</b><em>한 줄 추가</em></button>
         <button class="i-bulk" onclick="openBulk('item')"
@@ -1244,9 +1244,10 @@
       <button class="i-bulk" onclick="openBulk('market')">영수증</button>
       <div class="ihint" id="i-hint"></div>
     </div>
+    <div id="d-fold" hidden>
     <div class="modes" id="d-modes"></div>
     <div class="catlv" id="d-catlv" hidden></div>
-    <div class="fbar" id="d-fbar" hidden>
+    <div class="fbar" id="d-fbar">
       <select id="d-fmaj" class="lvsel" onchange="setLvFilter('maj',this.value)" aria-label="대분류"></select>
       <select id="d-fmid" class="lvsel" onchange="setLvFilter('mid',this.value)" aria-label="중분류"></select>
       <select id="d-fmin" class="lvsel" onchange="setLvFilter('min',this.value)" aria-label="항목"></select>
@@ -1256,6 +1257,7 @@
                placeholder="검색 — 항목·상호·비고">
         <button class="sclear" id="d-clear" onclick="setSearch('')" style="display:none" title="검색 지우기">×</button>
       </div>
+    </div>
     </div>
     <div class="active-f" id="d-active"></div>
     <div class="freeze freeze-col">
@@ -2511,8 +2513,9 @@ function applyFilterSel(v){
 }
 // 입력 폼은 접어둔다 — 볼 때마다 지나쳐야 하면 흐름이 끊긴다
 // 지출 내역 좁히기 — 목록 화면과 같은 규칙
+// 보기 방식 탭·분류 층위·검색을 한 번에 접는다. 걸려 있는 조건(d-active)은 접어도 보인다
 function toggleDetailFilter(open){
-  const box=document.getElementById('d-fbar'), h=document.getElementById('df-h');
+  const box=document.getElementById('d-fold'), h=document.getElementById('df-h');
   if(!box)return;
   const nowOpen=(open===undefined)?box.hidden:!!open;
   box.hidden=!nowOpen;
@@ -3049,14 +3052,18 @@ function clearFilters(){catFilter='전체';dayFilter='전체';payFilter='전체'
 function setPayFilter(p){
   payFilter=(payFilter===p&&p!=='전체')?'전체':p;   // 같은 카드를 다시 누르면 해제
   renderDetail();
-  const el=document.getElementById('d-modes');
-  if(el&&payFilter!=='전체')el.scrollIntoView({block:'start',behavior:'smooth'});
+  if(payFilter!=='전체')scrollToDetailList();
 }
 function setDayFilter(d){
   dayFilter=(dayFilter===d&&d!=='전체')?'전체':d;   // 같은 날짜를 다시 누르면 해제
   renderDetail();
-  const el=document.getElementById('d-modes');
-  if(el&&dayFilter!=='전체')el.scrollIntoView({block:'start',behavior:'smooth'});
+  if(dayFilter!=='전체')scrollToDetailList();
+}
+// 접혀 있으면 탭이 안 보이니, 걸린 조건 줄로 내려간다
+function scrollToDetailList(){
+  const fold=document.getElementById('d-fold');
+  const el=document.getElementById(fold&&!fold.hidden?'d-modes':'d-active');
+  if(el)el.scrollIntoView({block:'start',behavior:'smooth'});
 }
 function setMode(m){viewMode=m;guard('보기 방식',renderDetail);}
 // 화면을 그리다 오류가 나면 조용히 멈추는 대신 알려준다 (안 눌리는 것처럼 보이던 원인)
