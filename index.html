@@ -738,13 +738,14 @@
     padding:9px 13px;cursor:pointer;border:.5px solid var(--line);background:var(--card);color:var(--accent)}
   .selbar button.danger{background:var(--del,#FF3B30);border-color:transparent;color:#fff}
   .selbar button:disabled{opacity:.4;cursor:default}
-  /* 순서 바꾸기 — 이름 칸 앞에 ▲▼. 칸을 새로 넣지 않는 건 고르기와 같은 이유 */
-  .ordbtns{display:inline-flex;gap:3px;margin-right:7px;vertical-align:middle}
-  .ordbtns button{width:26px;height:24px;padding:0;border-radius:7px;cursor:pointer;
-    border:.5px solid var(--line);background:var(--card);color:var(--accent);
-    font-size:.7rem;line-height:1;font-family:inherit}
-  .ordbtns button:disabled{opacity:.3;cursor:default}
+  /* 순서 바꾸기 — 옮길 줄을 누르고(파랗게), 갈 자리의 줄을 누른다 */
+  .ordering #d-body tr[data-ordkey]{cursor:pointer}
+  #detail-table tr.ordpick td{background:var(--accent);color:#fff}
+  #detail-table tr.ordpick td *{color:#fff}
   #detail-table tr.ordmoved td{background:var(--accent-soft)}
+  #detail-table tr.ordoff td{opacity:.35}
+  .ordgrip{display:inline-block;margin-right:7px;color:var(--muted);font-size:.8rem;vertical-align:1px}
+  tr.ordpick .ordgrip{color:#fff}
   /* 고르는 동안에는 표를 눌러도 창이 열리지 않는다 — 줄 전체가 선택 단추가 된다 */
   .selecting tbody tr{cursor:pointer}
   /* 고를 때는 ✏️ 열을 감춘다. 어차피 그때는 못 누르고, 동그라미가 들어와
@@ -1587,7 +1588,8 @@
 </div>
 
 <div class="selbar" id="ordbar" hidden>
-  <span class="selnum">▲▼ 로 순서를 바꾸세요</span>
+  <span class="selnum" id="ord-msg">옮길 줄을 누르세요</span>
+  <button id="ord-unpick" onclick="ordUnpick()" hidden>다시 고르기</button>
   <button onclick="ordToggle(false)">완료</button>
 </div>
 
@@ -2218,7 +2220,7 @@ function showDetail(id){
     majFilter='전체';midFilter='전체';minFilter='전체';
     const se=document.getElementById('d-search');if(se)se.value='';
     const ce=document.getElementById('d-clear');if(ce)ce.style.display='none';}
-  if(!sameId(currentId,id))ordMode=false;
+  if(!sameId(currentId,id)&&ordMode)ordToggle(false);
   currentId=id;
   showView('view-detail');
   renderDetail();window.scrollTo(0,0);
@@ -2455,11 +2457,11 @@ function renderDetail(){
     const it=o.it;
     const hasSub=it.sub&&it.sub.length;
     return `<tr${selMode==='item'?` data-selkey="${o.i}" class="${selSet.has(String(o.i))?'selrow':''}" onclick="selToggle('${o.i}')"`
-        :ordMode?` data-ordkey="${o.i}"${o.i===ordMoved?' class="ordmoved"':''}`
+        :ordMode?` data-ordkey="${o.i}" onclick="ordTap(${o.i})"${o.i===ordPick?' class="ordpick"':o.i===ordMoved?' class="ordmoved"':''}`
         :` onclick="${hasSub?`showMarket(${o.i},'detail')`:`openItemForm(${o.i})`}"`}>`+
       `<td class="l">${esc(it.maj||it.cat||'')}</td>`+
       `<td class="l">${esc(it.mid||'')}</td>`+
-      `<td class="l nm">${selCk(o.i)}${ordMode?`<span class="ordbtns"><button onclick="ordMove(${o.i},-1)" aria-label="위로">▲</button><button onclick="ordMove(${o.i},1)" aria-label="아래로">▼</button></span>`:''}<b>${mark(it.min||it.name||'',q)}</b>${(it.sub&&it.sub.length)?`<span class="mkbadge">${it.sub.length}품목</span>`:''}</td>`+
+      `<td class="l nm">${selCk(o.i)}${ordMode?'<span class="ordgrip" aria-hidden="true">☰</span>':''}<b>${mark(it.min||it.name||'',q)}</b>${(it.sub&&it.sub.length)?`<span class="mkbadge">${it.sub.length}품목</span>`:''}</td>`+
       `<td class="muted dt">${fmtD(it.date)}</td>`+
       `<td class="num">${won(it.amount)}</td>`+
       `<td class="muted num">${rateTxt(it)}</td>`+
@@ -2512,7 +2514,7 @@ function renderDetail(){
       }).join('');
     }
     body.innerHTML=html;
-    if(ordMode)ordPaintEdges();
+    if(ordMode)ordPaint();
     // 수수료·캐시백이 이 여행에 하나도 없으면 두 열은 자리만 먹는다 — 통째로 숨긴다
     const feeSum=shown.reduce((a,o)=>a+(o.it.fee||0),0);
     const cbSum=shown.reduce((a,o)=>a+(o.it.cashback||0),0);
@@ -2949,46 +2951,52 @@ function toggleListFilter(){
 }
 
 // ================= 지출 순서 바꾸기 =================
-// 목록은 저장된 배열 순서 그대로 보인다. ▲▼ 는 지금 화면에서 바로 위·아래 줄과 자리를 바꾼다.
-// 날짜별·분류별로 묶여 있으면 같은 묶음 안에서만 움직이고,
-// 좁혀 보는 중이면 안 보이는 줄은 건너뛴다 (보이는 순서대로 움직여야 헷갈리지 않는다).
-let ordMode=false, ordMoved=-1;
+// 목록은 저장된 배열 순서 그대로 보인다.
+// 옮길 줄을 한 번 누르고, 갈 자리의 줄을 누르면 그 줄이 있던 자리로 들어간다
+// (아래로 옮기면 그 줄 뒤, 위로 옮기면 그 줄 앞 — 누른 자리에 놓인다).
+// 날짜별·분류별로 묶여 있으면 같은 묶음 안에서만 옮긴다 — 다른 날짜로 옮겨 봐야
+// 제 날짜 묶음으로 되돌아가 보여서다. 다른 묶음의 줄을 누르면 그 줄을 새로 고른다.
+let ordMode=false, ordMoved=-1, ordPick=-1;
 function ordToggle(on){
   const next=(on===undefined)?!ordMode:!!on;
   if(next&&!currentId)return;
   if(next&&selMode)selEnd();
-  ordMode=next;ordMoved=-1;
+  ordMode=next;ordMoved=-1;ordPick=-1;
+  document.documentElement.classList.toggle('ordering',ordMode);
   const h=document.getElementById('ord-h');if(h)h.setAttribute('aria-pressed',ordMode);
   const bar=document.getElementById('ordbar');if(bar)bar.hidden=!ordMode;
   renderDetail();
 }
-// 같은 묶음 안의 바로 옆 줄 — 묶음 머리(tr.grp)를 만나면 거기서 끝
-function ordNeighbor(tr,dir){
-  const n=dir<0?tr.previousElementSibling:tr.nextElementSibling;
-  return n&&n.dataset.ordkey!=null?n:null;
+// 줄이 속한 묶음 = 바로 위에 있는 묶음 머리(tr.grp). 전체 보기면 모두 같은 묶음(null)
+function ordGroupOf(tr){
+  for(let n=tr.previousElementSibling;n;n=n.previousElementSibling)
+    if(n.classList.contains('grp'))return n;
+  return null;
 }
-function ordPaintEdges(){
-  document.querySelectorAll('#d-body tr[data-ordkey]').forEach(tr=>{
-    const b=tr.querySelectorAll('.ordbtns button');
-    if(b[0])b[0].disabled=!ordNeighbor(tr,-1);
-    if(b[1])b[1].disabled=!ordNeighbor(tr,1);
-  });
+function ordRow(i){return document.querySelector(`#d-body tr[data-ordkey="${i}"]`);}
+function ordPaint(){
+  const pickTr=ordPick>=0?ordRow(ordPick):null;
+  if(ordPick>=0&&!pickTr)ordPick=-1;            // 좁혀 보다가 사라졌으면 고른 것을 푼다
+  const g=pickTr?ordGroupOf(pickTr):undefined;
+  document.querySelectorAll('#d-body tr[data-ordkey]').forEach(tr=>
+    tr.classList.toggle('ordoff',!!pickTr&&ordGroupOf(tr)!==g));
+  const t=tripById(currentId), it=t&&ordPick>=0?t.items[ordPick]:null;
+  const msg=document.getElementById('ord-msg');
+  if(msg)msg.textContent=it?`'${it.min||it.name||'항목'}' → 옮길 자리를 누르세요`:'옮길 줄을 누르세요';
+  const un=document.getElementById('ord-unpick');if(un)un.hidden=!it;
 }
-function ordMove(i,dir){
-  if(event)event.stopPropagation();
+function ordUnpick(){ordPick=-1;ordMoved=-1;renderDetail();}
+function ordTap(i){
   const t=tripById(currentId);if(!t)return;
-  const tr=document.querySelector(`#d-body tr[data-ordkey="${i}"]`);
-  const nb=tr&&ordNeighbor(tr,dir);if(!nb)return;
-  // 묶음 안에서도 배열 순서는 그대로라, 위 줄은 늘 앞 번호·아래 줄은 늘 뒷 번호다.
-  // 빼낸 뒤 이웃 번호 자리에 넣으면 위로는 이웃 앞, 아래로는 이웃 뒤에 들어간다
-  const j=Number(nb.dataset.ordkey);
-  const it=t.items.splice(i,1)[0];
-  t.items.splice(j,0,it);
-  ordMoved=j;
+  // 아직 안 골랐거나, 같은 줄을 다시 눌렀거나, 다른 묶음이면 → 고르기(풀기)
+  if(ordPick<0||ordPick===i){ordPick=ordPick===i?-1:i;ordMoved=-1;renderDetail();return;}
+  const a=ordRow(ordPick), b=ordRow(i);
+  if(!a||!b||ordGroupOf(a)!==ordGroupOf(b)){ordPick=i;ordMoved=-1;renderDetail();return;}
+  // 빼낸 뒤 누른 줄의 번호 자리에 넣으면, 아래로는 그 줄 뒤·위로는 그 줄 앞에 들어간다
+  const from=ordPick, it=t.items.splice(from,1)[0];
+  t.items.splice(i,0,it);
+  ordPick=-1;ordMoved=i;
   save();renderDetail();
-  const moved=document.querySelector(`#d-body tr[data-ordkey="${j}"]`);
-  if(moved){const r=moved.getBoundingClientRect();
-    if(r.top<60||r.bottom>innerHeight-80)moved.scrollIntoView({block:'center'});}
 }
 
 // ================= 고르기(선택 삭제) =================
