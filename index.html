@@ -1185,7 +1185,7 @@
     </div>
   </section>
 
-  <p class="foot-note"><span class="bstamp">v1.0 · 2026.08.09 · v34</span>기기에 자동 저장됩니다 · 기기를 옮길 땐 <b>백업/복원</b><br>
+  <p class="foot-note"><span class="bstamp">v1.0 · 2026.08.09 · v35</span>기기에 자동 저장됩니다 · 기기를 옮길 땐 <b>백업/복원</b><br>
     엑셀로 적어둔 표는 <b>입력 서식</b>을 받아 채운 뒤 <b>복원</b>으로 올리세요</p>
  </div>
 </div>
@@ -1811,6 +1811,8 @@ let trips=load();
 let currentId=null, catFilter='전체', dayFilter='전체', payFilter='전체', searchQ='', viewMode='all';
 // 분류는 대·중·소 세 층위 — 각각 따로 걸 수 있어야 한다
 const DEFAULT_MAJ='여행중';
+const defaultMajorItems=items=>(Array.isArray(items)?items:[])
+  .map(it=>({...it,maj:DEFAULT_MAJ}));
 let majFilter='전체', midFilter='전체', minFilter='전체';
 const lvOf=(it,k)=>k==='maj'?String(it.maj||'').trim()
   :k==='mid'?String(it.mid||'').trim()
@@ -5468,8 +5470,9 @@ function importBackupJSON(f){
     try{
       const data=JSON.parse(r.result);
       if(!Array.isArray(data))throw 0;
-      ask('백업 복원',`백업 파일의 <b>${data.length}건</b>을 불러옵니다.<br>현재 데이터를 모두 대체합니다.`,'복원',()=>{
-        trips=normIds(data.map(t=>({...t,items:Array.isArray(t.items)?t.items:[]})));
+      ask('백업 복원',`백업 파일의 <b>${data.length}건</b>을 불러옵니다.<br>현재 데이터를 모두 대체합니다.`+
+        `<br>불러온 지출의 대분류는 모두 <b>${DEFAULT_MAJ}</b>으로 맞춥니다.`,'복원',()=>{
+        trips=normIds(data.map(t=>({...t,items:defaultMajorItems(t.items)})));
         save();render();showList();toast(`${data.length}건을 불러왔습니다`);
       });
     }catch(err){toast('불러오기 실패: 올바른 백업 파일이 아닙니다');}
@@ -5982,7 +5985,7 @@ function importItemTable(rows,fname,done){
     const fileRate=Number(String(get(row,'rate')).replace(/[^\d.]/g,''))||null;
     const rate=(krw&&fx)?Math.round(krw/fx*1e6)/1e6:fileRate;
     const it={
-      maj:get(row,'maj')||DEFAULT_MAJ, mid:get(row,'mid')||cat, min:nm, name:nm, cat,
+      maj:DEFAULT_MAJ, mid:get(row,'mid')||cat, min:nm, name:nm, cat,
       // 원화가 비어 있으면 환율 × 현지화폐 로 채운다
       amount:krw||(rate&&fx?Math.round(fx*rate):0),
       date:cellDate(get(row,'date')),
@@ -6008,6 +6011,7 @@ function importItemTable(rows,fname,done){
       return esc(destName(d))+(bits.length?` <span class="muted">${esc(bits.join(' · '))}</span>`:'');
     }).join(', ')}</b>`:'')+
     (skipped?`<br><span class="muted">금액이 없는 ${skipped}줄은 건너뜁니다.</span>`:'')+
+    `<br>불러온 지출의 대분류는 모두 <b>${DEFAULT_MAJ}</b>으로 맞춥니다.`+
     `<br><br>기존 기록은 지우지 않습니다.`,
     '추가',()=>{
       let n=0;
