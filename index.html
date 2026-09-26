@@ -1263,6 +1263,7 @@
       <select id="d-fmid" class="lvsel" onchange="setLvFilter('mid',this.value)" aria-label="중분류"></select>
       <select id="d-fmin" class="lvsel" onchange="setLvFilter('min',this.value)" aria-label="항목"></select>
       <select id="d-fsel" onchange="applyFilterSel(this.value)" aria-label="보기 좁히기"></select>
+      <select id="d-fmer" class="lvsel" onchange="setMerFilter(this.value)" aria-label="상호명"></select>
       <div class="searchbar">
         <input id="d-search" type="search" autocomplete="off" oninput="setSearch(this.value)"
                placeholder="검색 — 항목·상호·비고">
@@ -1844,6 +1845,10 @@ let currentId=null, catFilter='전체', dayFilter='전체', payFilter='전체', 
 // 분류는 대·중·소 세 층위 — 각각 따로 걸 수 있어야 한다
 const DEFAULT_MAJ='여행중';
 let majFilter='전체', midFilter='전체', minFilter='전체';
+// 상호명 — 분류와 따로 논다. 어느 보기에서든 고를 수 있다
+let merFilter='전체';
+const merOf=it=>String(it.merchant||'').trim();
+function setMerFilter(v){merFilter=v;grpState.clear();renderDetail();}
 const lvOf=(it,k)=>k==='maj'?String(it.maj||'').trim()
   :k==='mid'?String(it.mid||'').trim()
   :String(it.min||it.name||'').trim();
@@ -2217,7 +2222,7 @@ function showList(){
 }
 function showDetail(id){
   if(!sameId(currentId,id)){catFilter='전체';dayFilter='전체';payFilter='전체';searchQ='';
-    majFilter='전체';midFilter='전체';minFilter='전체';
+    majFilter='전체';midFilter='전체';minFilter='전체';merFilter='전체';
     const se=document.getElementById('d-search');if(se)se.value='';
     const ce=document.getElementById('d-clear');if(ce)ce.style.display='none';}
   if(!sameId(currentId,id)&&ordMode)ordToggle(false);
@@ -2405,6 +2410,27 @@ function renderDetail(){
     }
     el.classList.toggle('on',el.value!=='전체');
   });
+  // 상호 — 다른 조건(분류·날짜·결제)으로 좁힌 것 안에서 목록을 만든다
+  {
+    const el=document.getElementById('d-fmer');
+    const pool=items.filter(it=>
+      (catFilter==='전체'||(it.cat||'기타')===catFilter)&&
+      (majFilter==='전체'||(lvOf(it,'maj')||'(빈칸)')===majFilter)&&
+      (midFilter==='전체'||(lvOf(it,'mid')||'(빈칸)')===midFilter)&&
+      (minFilter==='전체'||(lvOf(it,'min')||'(빈칸)')===minFilter)&&
+      (dayFilter==='전체'||(it.date||'')===dayFilter)&&
+      (payFilter==='전체'||(it.pay||'')===payFilter));
+    const by={};
+    pool.forEach(it=>{const v=merOf(it)||'(빈칸)';by[v]=(by[v]||0)+(it.amount||0);});
+    // 상호 없는 줄은 맨 아래로 — 많아도 고르고 싶은 대상은 아니다
+    const keys=Object.keys(by).sort((a,b)=>(a==='(빈칸)')-(b==='(빈칸)')||by[b]-by[a]);
+    const named=keys.filter(k=>k!=='(빈칸)').length;
+    el.innerHTML=[`<option value="전체">모든 상호 (${named})</option>`]
+      .concat(keys.map(v=>`<option value="${esc(v)}">${v==='(빈칸)'?'상호 없음':esc(v)} · ${won(by[v])}원</option>`)).join('');
+    el.value=keys.includes(merFilter)?merFilter:'전체';
+    if(el.value!==merFilter)merFilter='전체';   // 다른 조건을 바꿔서 사라진 상호면 푼다
+    el.classList.toggle('on',merFilter!=='전체');
+  }
 
   // 지금 걸려 있는 필터 — 다른 기준으로 건 것도 여기서 보이고 풀 수 있다
   const actives=[];
@@ -2415,6 +2441,7 @@ function renderDetail(){
   if(dayFilter!=='전체'){const d=new Date(dayFilter+'T00:00:00');
     actives.push(['날짜',isNaN(d)?dayFilter:fmtD(dayFilter),`setDayFilter('전체')`]);}
   if(payFilter!=='전체')actives.push(['결제',payFilter,`setPayFilter('전체')`]);
+  if(merFilter!=='전체')actives.push(['상호',merFilter==='(빈칸)'?'상호 없음':merFilter,`setMerFilter('전체')`]);
   const af=document.getElementById('d-active');
   af.style.display=actives.length?'':'none';
   af.innerHTML=actives.map(([k,v,go])=>
@@ -2433,6 +2460,7 @@ function renderDetail(){
     .filter(o=>minFilter==='전체'||(lvOf(o.it,'min')||'(빈칸)')===minFilter)
     .filter(o=>dayFilter==='전체'||(o.it.date||'')===dayFilter)
     .filter(o=>payFilter==='전체'||(o.it.pay||'')===payFilter)
+    .filter(o=>merFilter==='전체'||(merOf(o.it)||'(빈칸)')===merFilter)
     .filter(o=>!q||hay(o.it).includes(q));
 
   // 보기 방식 버튼
@@ -2495,7 +2523,7 @@ function renderDetail(){
       // 묶음 단추를 눌러도 빈 표가 나온 것처럼 보인다.
       // 찾고 있을 때(검색·조건)도 펼쳐야 보인다.
       const filtering=!!q||catFilter!=='전체'||dayFilter!=='전체'||payFilter!=='전체'
-        ||majFilter!=='전체'||midFilter!=='전체'||minFilter!=='전체';
+        ||majFilter!=='전체'||midFilter!=='전체'||minFilter!=='전체'||merFilter!=='전체';
       const forceOpen=filtering||shown.length<=25;
       html=keys.map(k=>{
         const rows=g.get(k);
@@ -2528,7 +2556,7 @@ function renderDetail(){
   }
 
   document.getElementById('d-filtered').textContent=
-    (q||catFilter!=='전체'||dayFilter!=='전체'||payFilter!=='전체'||majFilter!=='전체'||midFilter!=='전체'||minFilter!=='전체')
+    (q||catFilter!=='전체'||dayFilter!=='전체'||payFilter!=='전체'||majFilter!=='전체'||midFilter!=='전체'||minFilter!=='전체'||merFilter!=='전체')
       ?`${shown.length}건 / 전체 ${items.length}건`:`${items.length}건`;
   const emptyEl=document.getElementById('d-empty');
   if(items.length&&!shown.length){
@@ -3133,7 +3161,7 @@ function toggleFold(k){
 }
 function toggleAdd(){toggleFold('i');}
 function clearFilters(){catFilter='전체';dayFilter='전체';payFilter='전체';
-  majFilter='전체';midFilter='전체';minFilter='전체';grpState.clear();renderDetail();}
+  majFilter='전체';midFilter='전체';minFilter='전체';merFilter='전체';grpState.clear();renderDetail();}
 function setPayFilter(p){
   payFilter=(payFilter===p&&p!=='전체')?'전체':p;   // 같은 카드를 다시 누르면 해제
   renderDetail();
